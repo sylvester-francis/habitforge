@@ -196,6 +196,44 @@ Notice the error handling. `http.ListenAndServe` returns an `error`. We check it
 
 Modify the program so it returns the current time at `/time`. Use the `time` package. Make sure `go vet ./...` is clean.
 
+<details>
+<summary><strong>Solution</strong></summary>
+
+Register a second handler before the listen call:
+
+```go
+package main
+
+import (
+	"fmt"
+	"net/http"
+	"time"
+)
+
+func main() {
+	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, "habitforge")
+	})
+
+	http.HandleFunc("/time", func(w http.ResponseWriter, r *http.Request) {
+		fmt.Fprintln(w, time.Now().UTC().Format(time.RFC3339))
+	})
+
+	fmt.Println("listening on :8080")
+	if err := http.ListenAndServe(":8080", nil); err != nil {
+		fmt.Println("server error:", err)
+	}
+}
+```
+
+Run `go run ./cmd/server` and `curl http://localhost:8080/time`. You should see something like `2026-05-19T18:30:00Z`.
+
+Two small decisions worth noticing. We format with `time.RFC3339` rather than the default `time.Time` string, because RFC 3339 is the format the rest of this app will speak over JSON; getting used to it now costs nothing. And we call `.UTC()` before formatting, which foreshadows the domain rule from Chapter 4 that "today" is computed in UTC. Returning the server's local time here would be a small lie we would have to unwind later.
+
+`go vet ./...` is clean because there is nothing to flag: no unused imports, no `Printf` format mismatches, no ignored errors that vet cares about. If you forgot to add `"time"` to the imports, the compiler (not vet) stops you first, which is exactly the fast feedback the chapter is selling.
+
+</details>
+
 ---
 
 ## Chapter 3: Setting up Node and Next.js from zero
@@ -304,6 +342,56 @@ This is the opposite of older React projects where everything ran in the browser
 
 Edit `frontend/src/app/page.tsx` to display "HabitForge" as a heading. Run `bun dev` and confirm it appears. Then turn on `noUncheckedIndexedAccess` if it is not on, and resolve any errors that appear.
 
+<details>
+<summary><strong>Solution</strong></summary>
+
+Replace the generated boilerplate in `frontend/src/app/page.tsx` with the smallest thing that satisfies the brief:
+
+```tsx
+export default function Home() {
+  return (
+    <main className="mx-auto max-w-2xl p-6">
+      <h1 className="text-3xl font-bold">HabitForge</h1>
+    </main>
+  );
+}
+```
+
+Run `bun dev`, open http://localhost:3000, and you should see the heading. This is a server component: no `'use client'`, no state, no effects. It renders to HTML and ships no JavaScript for itself.
+
+Now turn on the flag in `frontend/tsconfig.json`:
+
+```json
+{
+  "compilerOptions": {
+    "strict": true,
+    "noUncheckedIndexedAccess": true
+  }
+}
+```
+
+You will most likely see *no* errors at this point, and that is the lesson rather than an anticlimax. The flag changes the type of any index access (`arr[0]`, `record[key]`) from `T` to `T | undefined`, so it only bites once you actually index into arrays or records — which we have not done yet. Turning it on now, while the project is empty, is free. Turning it on in Chapter 12 after the codebase indexes into query results in a dozen places would mean fixing a dozen places at once, which is precisely the "adding strictness later costs orders of magnitude more" tax the chapter warned about.
+
+If you want to *see* it work, add a throwaway line and watch the compiler complain:
+
+```ts
+const names = ["a", "b"];
+const first: string = names[0]; // Error: Type 'string | undefined' is not assignable to type 'string'.
+```
+
+The honest fix is to acknowledge the possibility, not to cast it away:
+
+```ts
+const first = names[0]; // first: string | undefined
+if (first !== undefined) {
+  // first: string here
+}
+```
+
+Delete the throwaway line once you have seen the error.
+
+</details>
+
 ---
 
 ## Chapter 4: Designing the domain
@@ -357,6 +445,22 @@ Write down on paper, in your own words, what the streak should be for the follow
 - `[]`
 
 Keep your answers. You will use them as test cases in Chapter 8.
+
+<details>
+<summary><strong>Solution</strong></summary>
+
+Today is `2026-05-19`. The rule: count consecutive days ending *at and including today*. The first missing day, walking backwards from today, stops the count.
+
+| Check-ins | Streak | Why |
+|---|---|---|
+| `[2026-05-19, 2026-05-18, 2026-05-17]` | **3** | Today, yesterday, and the day before are all present, with no gap. |
+| `[2026-05-18, 2026-05-17]` | **0** | Today (the 19th) has no check-in. The streak must end at today, so it is zero — yesterday's two days do not count toward a *current* streak. |
+| `[2026-05-19, 2026-05-17]` | **1** | Today is present, so the count starts at 1. The 18th is missing, which breaks the run immediately. The 17th is stranded behind the gap and does not count. |
+| `[]` | **0** | No check-ins, no streak. |
+
+The second row is the one that trips people up, and it is the most important. "Current streak" is not "longest run in history" — it is anchored to today. A habit you kept for a year but skipped today has a current streak of zero. That distinction is exactly the kind of boundary that mutation testing in Chapter 9 will hammer on, and it is why we will later write a separate `LongestStreak` (Chapter 7's exercise) for the "best run ever" question. These four answers reappear verbatim as the daily test table in Chapter 8.
+
+</details>
 
 ---
 
@@ -513,6 +617,62 @@ Run the server, hit `curl http://localhost:8080/api/habits`, confirm you see the
 ### Exercise
 
 Add a middleware that sets a custom `X-App` header with value `habitforge` on every response. Write it as a function returning `func(http.Handler) http.Handler` (the standard middleware shape). Wire it in with `r.Use(...)`. Confirm the header appears with `curl -i`.
+
+<details>
+<summary><strong>Solution</strong></summary>
+
+Add the middleware to `internal/httpapi/router.go` (or a new `middleware.go` in the same package):
+
+```go
+func appHeader() func(http.Handler) http.Handler {
+	return func(next http.Handler) http.Handler {
+		return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+			w.Header().Set("X-App", "habitforge")
+			next.ServeHTTP(w, r)
+		})
+	}
+}
+```
+
+Wire it in alongside the other middleware in `NewRouter`:
+
+```go
+r.Use(appHeader())
+```
+
+Confirm it:
+
+```bash
+curl -i http://localhost:8080/healthz
+```
+
+```
+HTTP/1.1 200 OK
+X-App: habitforge
+...
+```
+
+There are three layers here and each earns its place. The outer `appHeader()` exists only so the call site reads like chi's own middleware (`middleware.Timeout(...)`); it returns the actual middleware. The middle function *is* the standard shape — chi hands it the `next` handler and expects a wrapped handler back. The inner `http.HandlerFunc` adapts a plain `func(w, r)` into something with a `ServeHTTP` method.
+
+The one detail that matters for correctness is *ordering*. We set the header **before** calling `next.ServeHTTP`. Once any handler downstream calls `WriteHeader` (or its first `Write`, which calls `WriteHeader(200)` implicitly), the header block is flushed to the client and later `Set` calls are silently ignored. Set headers on the way in, not on the way out.
+
+A good way to prove the ordering is right: curl one of the stub routes, which returns `501` from its handler.
+
+```bash
+curl -i http://localhost:8080/api/habits
+```
+
+```
+HTTP/1.1 501 Not Implemented
+X-App: habitforge
+Content-Type: application/json
+...
+{"error":"soon"}
+```
+
+The header rides along even on the error response, because the middleware ran and set it before `writeError` wrote the status line.
+
+</details>
 
 ---
 
@@ -714,6 +874,61 @@ Notice `fmt.Errorf("...: %w", err)`. The `%w` verb wraps the original error so c
 
 **Principle.** An error message should be a breadcrumb trail. By the time it reaches the user, the chain should read like a stack trace in plain English.
 
+<details>
+<summary><strong>Solution: the remaining store methods</strong></summary>
+
+Each method follows the same shape as `CreateHabit` and `ListHabits`: call the generated query, wrap any error with `%w`, and convert SQL row types to our domain types.
+
+```go
+func (s *SQLiteStore) GetHabit(ctx context.Context, id int64) (Habit, error) {
+	row, err := s.q.GetHabit(ctx, id)
+	if err != nil {
+		// sql.ErrNoRows flows through %w, so the handler can map it to a 404.
+		return Habit{}, fmt.Errorf("get habit %d: %w", id, err)
+	}
+	t, _ := time.Parse(time.RFC3339, row.CreatedAt)
+	return Habit{ID: row.ID, Name: row.Name, Schedule: row.Schedule, CreatedAt: t}, nil
+}
+
+func (s *SQLiteStore) DeleteHabit(ctx context.Context, id int64) error {
+	if err := s.q.DeleteHabit(ctx, id); err != nil {
+		return fmt.Errorf("delete habit %d: %w", id, err)
+	}
+	return nil
+}
+
+func (s *SQLiteStore) CreateCheckIn(ctx context.Context, habitID int64, day time.Time) error {
+	err := s.q.CreateCheckIn(ctx, gen.CreateCheckInParams{
+		HabitID:    habitID,
+		OccurredOn: day.UTC().Format(dateFmt),
+	})
+	if err != nil {
+		return fmt.Errorf("create checkin for habit %d: %w", habitID, err)
+	}
+	return nil
+}
+
+func (s *SQLiteStore) ListCheckIns(ctx context.Context, habitID int64) ([]time.Time, error) {
+	rows, err := s.q.ListCheckIns(ctx, habitID)
+	if err != nil {
+		return nil, fmt.Errorf("list checkins for habit %d: %w", habitID, err)
+	}
+	out := make([]time.Time, 0, len(rows))
+	for _, r := range rows {
+		t, err := time.Parse(dateFmt, r)
+		if err != nil {
+			return nil, fmt.Errorf("parse checkin date %q: %w", r, err)
+		}
+		out = append(out, t)
+	}
+	return out, nil
+}
+```
+
+Three things to notice. `CreateCheckIn` stores `occurred_on` with `dateFmt` (`2006-01-02`), the date-only format, while habits store `created_at` as full RFC 3339 timestamps — the schema models a check-in as belonging to a *day*, not a moment, and the `UNIQUE(habit_id, occurred_on)` constraint plus `INSERT OR IGNORE` quietly make a second check-in on the same day a no-op. `ListCheckIns` selects only the `occurred_on` column, so the generated rows are plain `[]string`; we parse each back into a `time.Time`. And unlike `CreateHabit`, here we *do* check the parse error rather than discarding it with `_`: a malformed date in the database is a real corruption signal worth surfacing, not swallowing.
+
+</details>
+
 ### Filling in the handlers
 
 Update `backend/internal/httpapi/router.go` to accept a store, then update handlers. Sketch:
@@ -758,6 +973,106 @@ r := httpapi.NewRouter(&httpapi.API{Store: s})
 
 Implement `createHabit`. It should parse JSON with fields `name` and `schedule`, validate that `schedule` is either `daily` or `weekly`, and return 400 with a useful error message if not. Return 201 with the created habit on success. Write `getHabit`, `deleteHabit`, and `createCheckIn` yourself with the same care.
 
+<details>
+<summary><strong>Solution</strong></summary>
+
+These are methods on `*API` (the struct introduced earlier in this chapter), so they can reach `a.Store`. They need a few more imports in `handlers.go`: `database/sql`, `errors`, `strconv`, `strings`, and `github.com/go-chi/chi/v5`.
+
+```go
+func (a *API) createHabit(w http.ResponseWriter, r *http.Request) {
+	var req struct {
+		Name     string `json:"name"`
+		Schedule string `json:"schedule"`
+	}
+	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
+		writeError(w, http.StatusBadRequest, "invalid JSON body")
+		return
+	}
+
+	req.Name = strings.TrimSpace(req.Name)
+	if req.Name == "" {
+		writeError(w, http.StatusBadRequest, "name is required")
+		return
+	}
+	if req.Schedule != "daily" && req.Schedule != "weekly" {
+		writeError(w, http.StatusBadRequest, `schedule must be "daily" or "weekly"`)
+		return
+	}
+
+	h, err := a.Store.CreateHabit(r.Context(), req.Name, req.Schedule)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not create habit")
+		return
+	}
+	writeJSON(w, http.StatusCreated, h)
+}
+
+func (a *API) getHabit(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	h, err := a.Store.GetHabit(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "habit not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load habit")
+		return
+	}
+	writeJSON(w, http.StatusOK, h)
+}
+
+func (a *API) deleteHabit(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	if err := a.Store.DeleteHabit(r.Context(), id); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not delete habit")
+		return
+	}
+	w.WriteHeader(http.StatusNoContent)
+}
+
+func (a *API) createCheckIn(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	// The server decides "today" in UTC. The client does not get to pick the
+	// date — that keeps the streak rules honest and matches the Chapter 4 spec.
+	if err := a.Store.CreateCheckIn(r.Context(), id, time.Now().UTC()); err != nil {
+		writeError(w, http.StatusInternalServerError, "could not record check-in")
+		return
+	}
+	w.WriteHeader(http.StatusCreated)
+}
+```
+
+The decisions that matter:
+
+- **Parse, then validate, then act.** Each early `return` after `writeError` keeps the happy path un-indented at the bottom. This is the dominant Go handler shape; resist the urge to nest.
+- **`getHabit` distinguishes 404 from 500.** A missing row is the client asking for something that does not exist (`404`); a broken database is our fault (`500`). The `errors.Is(err, sql.ErrNoRows)` check works only because the store wrapped the error with `%w` — this is the payoff of the breadcrumb principle above. Conflating the two statuses is a classic way to send a pager alert for what was really a typo'd URL.
+- **`deleteHabit` returns `204 No Content`.** There is no body to send. Note it is idempotent by virtue of the SQL: deleting a non-existent id is not an error, so a double-delete still returns `204`.
+- **The server owns the clock.** `createCheckIn` calls `time.Now().UTC()` rather than trusting a date from the body. Chapter 7's pure functions take time as a parameter precisely so this one impure call lives at the edge, in the handler, where it belongs.
+
+Don't forget to register the methods on the router (`r.Get("/{id}", api.getHabit)`, etc.) as sketched in the persistence section. Then exercise them:
+
+```bash
+curl -s -X POST localhost:8080/api/habits -d '{"name":"Read","schedule":"daily"}'
+curl -s -X POST localhost:8080/api/habits -d '{"name":"","schedule":"hourly"}'   # 400, "name is required"
+curl -s localhost:8080/api/habits/1
+curl -s -X POST localhost:8080/api/habits/1/checkins -i   # 201
+curl -s -X DELETE localhost:8080/api/habits/1 -i          # 204
+```
+
+</details>
+
 ---
 
 ## Chapter 7: Backend part 3, streak logic
@@ -770,7 +1085,7 @@ Create `backend/internal/habit/streak.go`:
 package habit
 
 import (
-	"sort"
+	"fmt"
 	"time"
 )
 
@@ -829,10 +1144,6 @@ func weeklyStreak(today time.Time, checkIns []time.Time) int {
 		weeks[isoWeekKey(c.UTC())] = true
 	}
 
-	// Sort check-ins descending so we can find the most recent.
-	sorted := append([]time.Time(nil), checkIns...)
-	sort.Slice(sorted, func(i, j int) bool { return sorted[i].After(sorted[j]) })
-
 	streak := 0
 	cursor := today
 	for {
@@ -851,26 +1162,13 @@ func startOfDay(t time.Time) time.Time {
 
 func isoWeekKey(t time.Time) string {
 	y, w := t.ISOWeek()
-	return formatWeek(y, w)
-}
-
-func formatWeek(year, week int) string {
-	return time.Date(year, 1, 1, 0, 0, 0, 0, time.UTC).Format("2006") + "-W" + padWeek(week)
-}
-
-func padWeek(w int) string {
-	if w < 10 {
-		return "0" + itoa(w)
-	}
-	return itoa(w)
-}
-
-func itoa(n int) string {
-	return time.Date(0, 0, n, 0, 0, 0, 0, time.UTC).Format("2")
+	return fmt.Sprintf("%04d-W%02d", y, w)
 }
 ```
 
-You will notice some unusual choices. `itoa` is implemented in a slightly contrived way to avoid pulling in `strconv` just for this. In a real codebase, use `strconv.Itoa`. The point here is to show that the streak computation is pure: same inputs, same outputs, no clock reads inside, no database access. That property is what makes it testable.
+`isoWeekKey` reduces a date to a string like `2026-W21`. We lean on the standard library's `time.ISOWeek`, which already knows the two facts that make this fiddly by hand: ISO weeks run Monday to Sunday, and a week near New Year can belong to the neighbouring year (so the last days of December can be `2026-W53` while the first days of January are also `2026-W53`). Formatting the year and week into one string gives us a key we can compare and put in a map.
+
+Notice what the streak computation does *not* do: it never reads the clock, never touches the database, never logs. Same inputs, same outputs, every time. That purity is what makes the function trivial to test, which is the whole point of the next two chapters.
 
 **Principle.** Push side effects to the edges. Pure functions in the core; impure functions at the boundary. Tests get faster and more honest.
 
@@ -883,6 +1181,81 @@ Add a route `GET /api/habits/{id}/streak` that returns `{ "streak": N }`. The ha
 ### Exercise
 
 Add a "longest streak" function `LongestStreak(schedule, checkIns) int` that returns the length of the longest consecutive run anywhere in history, not just ending today. Write the signature first. Think about the algorithm before coding it.
+
+<details>
+<summary><strong>Solution</strong></summary>
+
+The signature mirrors `CurrentStreak`, minus the `today` parameter — "longest run ever" does not depend on today:
+
+```go
+func LongestStreak(schedule Schedule, checkIns []time.Time) int
+```
+
+Now the algorithm, before any code. `CurrentStreak` walks backwards from a known anchor (today). `LongestStreak` has no anchor: the best run could be anywhere. The clean trick is to stop thinking in dates and start thinking in **period ordinals** — turn each check-in into an integer that increments by exactly 1 for adjacent periods. Then a run is just a set of consecutive integers, and "longest consecutive run" is a classic set problem: put the ordinals in a set, and for each ordinal that has no predecessor in the set (so it *starts* a run), count forward until the run ends. Each element is visited at most twice, so it is O(n).
+
+The ordinal functions:
+
+```go
+// dayOrdinal counts days since the Unix epoch (UTC midnight to midnight).
+func dayOrdinal(t time.Time) int {
+	return int(startOfDay(t).Unix() / 86400)
+}
+
+// weekOrdinal counts ISO weeks: the Monday of t's week, as a week index.
+// Adjacent ISO weeks differ by exactly one, including across year boundaries.
+func weekOrdinal(t time.Time) int {
+	d := startOfDay(t)
+	offset := (int(d.Weekday()) + 6) % 7 // days since Monday (Sun=0..Sat=6 -> Mon=0)
+	monday := d.AddDate(0, 0, -offset)
+	return int(monday.Unix() / 86400 / 7)
+}
+```
+
+And the function itself:
+
+```go
+func LongestStreak(schedule Schedule, checkIns []time.Time) int {
+	if len(checkIns) == 0 {
+		return 0
+	}
+
+	var ordinal func(time.Time) int
+	switch schedule {
+	case Daily:
+		ordinal = dayOrdinal
+	case Weekly:
+		ordinal = weekOrdinal
+	default:
+		return 0
+	}
+
+	periods := make(map[int]bool, len(checkIns))
+	for _, c := range checkIns {
+		periods[ordinal(c.UTC())] = true
+	}
+
+	longest := 0
+	for p := range periods {
+		if periods[p-1] {
+			continue // not the start of a run; we will count it from its start
+		}
+		run := 1
+		for periods[p+run] {
+			run++
+		}
+		if run > longest {
+			longest = run
+		}
+	}
+	return longest
+}
+```
+
+Why ordinals rather than the `isoWeekKey` strings `CurrentStreak` uses? Because here we need *adjacency* — "is the next period also present?" — and `p+1` is trivial with an integer but awkward with a formatted string. The weekly ordinal is the subtle one: by snapping each date to the Monday of its ISO week and dividing the day count by 7, consecutive ISO weeks always land on consecutive integers, even across the December-to-January boundary where the *week number* resets but the *Monday* does not. That is the same year-boundary correctness `time.ISOWeek` gives us in `CurrentStreak`, arrived at a different way.
+
+This stays pure — no clock, no I/O — so it tests exactly like `CurrentStreak`. A quick check: for daily check-ins on the 1st, 2nd, 3rd, then a gap, then the 10th and 11th, `LongestStreak` returns `3`, while `CurrentStreak` evaluated on the 11th returns `2`. Different questions, different answers, which is the whole reason this function exists.
+
+</details>
 
 ---
 
@@ -1011,6 +1384,107 @@ The HTML report shows you exactly which lines ran. Coverage is a _signal_. High 
 
 Write tests for the weekly streak. Include at least one case that spans a year boundary (week 1 vs week 52). Include one case at the ISO week boundary (Sunday vs Monday). Use the table pattern.
 
+<details>
+<summary><strong>Solution</strong></summary>
+
+Weekly cases each need their own `today`, so we add it to the table rather than using a single package-level value. The `date` helper from the daily test is reused unchanged. The dates below are chosen deliberately: `2026-05-18` is a Monday and `2026-05-17` the Sunday before it (different ISO weeks), and `2027-01-06` sits in ISO week `2027-W01` while the dates seven and fourteen days earlier fall in `2026-W53` and `2026-W52`.
+
+```go
+func TestCurrentStreakWeekly(t *testing.T) {
+	tests := []struct {
+		name     string
+		today    time.Time
+		checkIns []time.Time
+		want     int
+	}{
+		{
+			name:  "three consecutive weeks ending this week",
+			today: date(2026, 5, 20), // Wed, ISO 2026-W21
+			checkIns: []time.Time{
+				date(2026, 5, 20), // W21
+				date(2026, 5, 13), // W20
+				date(2026, 5, 6),  // W19
+			},
+			want: 3,
+		},
+		{
+			name:  "this week missing",
+			today: date(2026, 5, 20), // W21, no check-in
+			checkIns: []time.Time{
+				date(2026, 5, 13), // W20
+				date(2026, 5, 6),  // W19
+			},
+			want: 0,
+		},
+		{
+			name:  "gap breaks the streak",
+			today: date(2026, 5, 20), // W21
+			checkIns: []time.Time{
+				date(2026, 5, 20), // W21
+				date(2026, 5, 6),  // W19 (W20 missing)
+			},
+			want: 1,
+		},
+		{
+			name:  "two check-ins in one week count once",
+			today: date(2026, 5, 20), // W21
+			checkIns: []time.Time{
+				date(2026, 5, 18), // Mon, W21
+				date(2026, 5, 20), // Wed, W21
+			},
+			want: 1,
+		},
+		{
+			name:  "sunday and monday are different ISO weeks",
+			today: date(2026, 5, 18), // Mon, W21
+			checkIns: []time.Time{
+				date(2026, 5, 18), // Mon, W21
+				date(2026, 5, 17), // Sun, W20
+			},
+			want: 2,
+		},
+		{
+			name:  "spans the year boundary",
+			today: date(2027, 1, 6), // ISO 2027-W01
+			checkIns: []time.Time{
+				date(2027, 1, 6),   // 2027-W01
+				date(2026, 12, 30), // 2026-W53
+				date(2026, 12, 23), // 2026-W52
+			},
+			want: 3,
+		},
+		{
+			// Regression test for the isoWeekKey fix in Chapter 7. The old
+			// home-rolled key collided weeks 10 and 41 (both formatted as "10"),
+			// which would have reported a phantom streak of 1 here.
+			name:     "weeks 10 and 41 must not collide",
+			today:    date(2026, 10, 7), // ISO 2026-W41
+			checkIns: []time.Time{date(2026, 3, 4)}, // ISO 2026-W10
+			want:     0,
+		},
+		{
+			name:     "empty list",
+			today:    date(2026, 5, 20),
+			checkIns: nil,
+			want:     0,
+		},
+	}
+
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			got := CurrentStreak(Weekly, tt.today, tt.checkIns)
+			if got != tt.want {
+				t.Fatalf("got %d, want %d", got, tt.want)
+			}
+		})
+	}
+}
+```
+
+Run `go test ./internal/habit/`. The cases that earn their keep are the last three. The Sunday/Monday case proves the code respects ISO week boundaries rather than, say, bucketing by `year-month-week-of-month`. The year-boundary case proves we trust `time.ISOWeek` for the December-to-January seam instead of doing our own date math. And the weeks-10-and-41 case is a *regression test*: it fails against the original `itoa`/`padWeek` key helpers (which collided those two weeks onto the string `"10"`) and passes against the `fmt.Sprintf("%04d-W%02d", ...)` version. Writing the test that would have caught the bug is how you make sure it stays caught — which is exactly the discipline Chapter 9 formalises with mutation testing.
+
+</details>
+
 ---
 
 ## Chapter 9: Mutation testing in Go with gremlins
@@ -1097,6 +1571,60 @@ The mutators correspond to categories of changes. Boundary mutations (`<` to `<=
 
 Run `gremlins unleash ./internal/habit/...` and record the kill ratio. Pick one surviving mutant, write a new test that kills it, and re-run. Do this until the ratio is above 85 percent or every survivor is genuinely equivalent. Note in a comment which survivors are equivalent and why.
 
+<details>
+<summary><strong>Solution</strong></summary>
+
+The exact survivors depend on which tests you have and your gremlins version, so this is a worked example of the *loop*, not a fixed answer key. Suppose the first run reports something like:
+
+```
+Mutation testing completed in 8s
+Killed: 22, Lived: 3, Timed out: 1, Not covered: 0
+Mutation score: 86.96%
+```
+
+and one of the survivors is:
+
+```
+LIVED  internal/habit/streak.go:21:3  `streak++` => `streak--`
+```
+
+Read it the way the chapter says: a survivor is a sentence your tests cannot finish. If flipping `streak++` to `streak--` changes nothing your tests observe, then **no test asserts the actual count** — only whether the streak is zero or non-zero. Look back at the daily table from Chapter 8: the largest expected value is `3`. That is enough to catch `++`→`--` only if `3` is distinguishable from the mutated result, but a long, unambiguous count makes the assertion airtight. Add one:
+
+```go
+{
+	name: "five consecutive days",
+	checkIns: []time.Time{
+		date(2026, 5, 19), date(2026, 5, 18), date(2026, 5, 17),
+		date(2026, 5, 16), date(2026, 5, 15),
+	},
+	want: 5,
+},
+```
+
+Re-run. `streak--` now produces a wrong number (it would underflow toward negatives), the assertion fails, and the mutant flips to `KILLED`.
+
+The other classic survivor on this code is a boundary mutant:
+
+```
+LIVED  internal/habit/streak.go:24:3  `AddDate(0, 0, -1)` => `AddDate(0, 0, 0)`
+```
+
+If the cursor stops advancing, the loop either spins or keeps re-finding today. A test with a streak length of two or more and an exact `want` kills it, because a stuck cursor can no longer reproduce the right count. The five-day case above does double duty here.
+
+Now the honest part of the exercise — not every survivor deserves a test. If gremlins mutates a defensive `default:` branch that returns `0` for an unknown schedule, and you decide that branch is genuinely unreachable through the public API, that is an **equivalent mutant**. Document it rather than contorting a test to reach dead code:
+
+```go
+// CurrentStreak's default branch is unreachable via the exported API: callers
+// pass Daily or Weekly. Gremlins flags mutations here as survivors; they are
+// equivalent. Left intentionally as a guard against future Schedule values.
+default:
+	return 0
+```
+
+Chasing that last mutant to 100 percent would mean either weakening the type or writing a test that exercises a state the rest of the program forbids. Both are worse than a one-line comment. Record your final ratio (here, comfortably above 85 percent after the two real fixes), and stop where the survivors are all equivalent.
+
+</details>
+
 ---
 
 ## Chapter 10: Generating the API contract with tygo
@@ -1138,7 +1666,7 @@ type CreateHabitRequest struct {
 	Schedule string `json:"schedule"`
 }
 
-// CheckInResponse is returned for streak queries.
+// StreakResponse is returned for streak queries.
 type StreakResponse struct {
 	Streak int `json:"streak"`
 }
@@ -1190,6 +1718,65 @@ Run `make gen` whenever you change a struct.
 ### Exercise
 
 Add a `name` length constraint in your Go validation (1 to 80 characters). Then add a corresponding rule in the frontend (Chapter 13 will cover Zod) and observe how easy it is for these to diverge if you are not careful. We will discuss strategies in the testing chapters.
+
+<details>
+<summary><strong>Solution</strong></summary>
+
+On the backend, pull the rule out of the handler into a small `validation.go` so there is one named place for it (the Chapter 14 cross-check test will point at this file by name):
+
+```go
+// backend/internal/httpapi/validation.go
+package httpapi
+
+import (
+	"fmt"
+	"strings"
+	"unicode/utf8"
+)
+
+const maxNameLen = 80
+
+func validateName(name string) (string, error) {
+	name = strings.TrimSpace(name)
+	if n := utf8.RuneCountInString(name); n < 1 || n > maxNameLen {
+		return "", fmt.Errorf("name must be 1 to %d characters", maxNameLen)
+	}
+	return name, nil
+}
+```
+
+Then `createHabit` from the Chapter 6 exercise collapses to:
+
+```go
+name, err := validateName(req.Name)
+if err != nil {
+	writeError(w, http.StatusBadRequest, err.Error())
+	return
+}
+// ... use name from here ...
+```
+
+On the frontend, the matching rule is the Zod schema you will write in Chapter 13:
+
+```ts
+name: z.string().min(1, "Name is required").max(80, "Name must be 80 characters or fewer"),
+```
+
+Now the point of the exercise. You have written `80` in two languages, derived from nothing in common. Worse, the three obvious ways to measure "length" disagree:
+
+- Go's `utf8.RuneCountInString` counts **Unicode code points**.
+- JavaScript's `string.length` (which Zod's `.max` uses) counts **UTF-16 code units**.
+- A naive `len(name)` in Go would count **bytes**.
+
+For `"Read 20 pages"` all three agree. For a name containing an emoji like `"🏃"` they do not: one code point, two UTF-16 units, four bytes. A name that is exactly 80 emoji passes Go's rune check but fails Zod's `.max(80)`, so the frontend rejects what the backend would accept. The frontend is stricter here, which fails safe, but the reverse pairing (frontend lax, backend strict) shows up to the user as a form that submits and then errors — the worst kind of validation, because it looks like a server bug.
+
+There is no free fix; the boundary genuinely has two validators. What you *can* do is make the contract visible and tested rather than implicit:
+
+1. Keep the magic number in one named constant per side (`maxNameLen`, and a `MAX_NAME_LEN` on the TS side) so a change is one edit, not a search.
+2. Pin the agreement with a test, which is exactly what Chapter 14 does with the "schema constants match the backend" test.
+3. Accept that "80 of what" is part of the contract. For ASCII-leaning habit names the discrepancy is academic; document the choice rather than pretending it does not exist.
+
+</details>
 
 ---
 
@@ -1335,6 +1922,82 @@ After `go get github.com/go-chi/cors`.
 ### Exercise
 
 Add a page at `/habits/[id]` that shows a single habit's details and current streak. Fetch from `/api/habits/:id` and `/api/habits/:id/streak`. Render a placeholder if either fails.
+
+<details>
+<summary><strong>Solution</strong></summary>
+
+First add the two fetchers to `frontend/src/lib/api.ts`, following the same shape as `listHabits`:
+
+```ts
+import type { Habit, CreateHabitRequest, StreakResponse } from "@/types/api";
+
+export async function getHabit(id: number): Promise<Habit> {
+  const res = await fetch(`${BASE}/api/habits/${id}`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`getHabit: ${res.status}`);
+  return res.json();
+}
+
+export async function getStreak(id: number): Promise<StreakResponse> {
+  const res = await fetch(`${BASE}/api/habits/${id}/streak`, { cache: "no-store" });
+  if (!res.ok) throw new Error(`getStreak: ${res.status}`);
+  return res.json();
+}
+```
+
+Then the page, as a server component, at `frontend/src/app/habits/[id]/page.tsx`:
+
+```tsx
+import { getHabit, getStreak } from "@/lib/api";
+
+export default async function HabitDetailPage({
+  params,
+}: {
+  params: Promise<{ id: string }>;
+}) {
+  const { id } = await params;
+  const habitId = Number(id);
+
+  const [habitResult, streakResult] = await Promise.allSettled([
+    getHabit(habitId),
+    getStreak(habitId),
+  ]);
+
+  if (habitResult.status === "rejected") {
+    return (
+      <main className="mx-auto max-w-2xl p-6">
+        <p className="text-red-600">Could not load this habit.</p>
+      </main>
+    );
+  }
+
+  const habit = habitResult.value;
+  const streak =
+    streakResult.status === "fulfilled" ? streakResult.value.streak : null;
+
+  return (
+    <main className="mx-auto max-w-2xl p-6">
+      <h1 className="text-2xl font-bold">{habit.name}</h1>
+      <p className="mt-1 text-sm text-gray-500">{habit.schedule}</p>
+      <p className="mt-4 text-lg">
+        Current streak:{" "}
+        {streak === null ? (
+          <span className="text-gray-400">unavailable</span>
+        ) : (
+          <span className="font-semibold">{streak}</span>
+        )}
+      </p>
+    </main>
+  );
+}
+```
+
+Two things deserve a note.
+
+First, `params` is a `Promise` that you `await`. In the App Router as of Next.js 15, dynamic route params (and `searchParams`) are async — a change from Next 14, where `params` was a plain object. If your editor's types insist `params` is `{ id: string }` directly, you are on an older version; the `await` form is correct for the version this guide targets.
+
+Second, the placeholder requirement is handled with `Promise.allSettled`, not `Promise.all`. With `Promise.all`, one failed request rejects the whole thing and you lose the data you *did* get. `allSettled` lets us treat the two failures differently: if the **habit** fails to load there is nothing to show, so we render the error placeholder; if only the **streak** fails, we still render the habit and degrade the streak to "unavailable". That asymmetry is a small product decision — the name and schedule are the page; the streak is a nice-to-have — and the code makes it explicit rather than letting `Promise.all` flatten both into a single all-or-nothing failure.
+
+</details>
 
 ---
 
@@ -1516,6 +2179,84 @@ There is a subtle bug to think about: incrementing by one assumes today was not 
 
 Wire up the check-in mutation on the habit detail page. Make the button optimistic. Try it with the backend running and then with the backend stopped to confirm the rollback works.
 
+<details>
+<summary><strong>Solution</strong></summary>
+
+Add the mutation's network function to `frontend/src/lib/api.ts`. The server decides the date (Chapter 6's `createCheckIn` uses `time.Now().UTC()`), so the client sends no body:
+
+```ts
+export async function createCheckIn(habitId: number): Promise<void> {
+  const res = await fetch(`${BASE}/api/habits/${habitId}/checkins`, {
+    method: "POST",
+  });
+  if (!res.ok) throw new Error(`createCheckIn: ${res.status}`);
+}
+```
+
+The detail page from Chapter 11 is a server component, but a button with state and an `onClick` needs to be a client component. Peel off the smallest possible one — just the streak readout and its button — in `frontend/src/components/check-in.tsx`:
+
+```tsx
+"use client";
+
+import { useMutation, useQuery, useQueryClient } from "@tanstack/react-query";
+import { createCheckIn, getStreak } from "@/lib/api";
+
+export function CheckIn({ habitId }: { habitId: number }) {
+  const qc = useQueryClient();
+
+  const { data } = useQuery({
+    queryKey: ["streak", habitId],
+    queryFn: () => getStreak(habitId),
+  });
+
+  const checkIn = useMutation({
+    mutationFn: () => createCheckIn(habitId),
+    onMutate: async () => {
+      await qc.cancelQueries({ queryKey: ["streak", habitId] });
+      const prev = qc.getQueryData<{ streak: number }>(["streak", habitId]);
+      qc.setQueryData(["streak", habitId], { streak: (prev?.streak ?? 0) + 1 });
+      return { prev };
+    },
+    onError: (_err, _vars, ctx) => {
+      if (ctx?.prev) qc.setQueryData(["streak", habitId], ctx.prev);
+    },
+    onSettled: () => {
+      qc.invalidateQueries({ queryKey: ["streak", habitId] });
+    },
+  });
+
+  return (
+    <div className="mt-4 flex items-center gap-3">
+      <span className="text-lg">
+        Current streak:{" "}
+        <span className="font-semibold">{data?.streak ?? "…"}</span>
+      </span>
+      <button
+        onClick={() => checkIn.mutate()}
+        disabled={checkIn.isPending}
+        className="rounded bg-black px-4 py-2 text-white disabled:opacity-50"
+      >
+        {checkIn.isPending ? "Saving…" : "Mark done today"}
+      </button>
+      {checkIn.error && (
+        <span className="text-sm text-red-600">Could not save — rolled back</span>
+      )}
+    </div>
+  );
+}
+```
+
+Then the detail page renders `<CheckIn habitId={habitId} />` in place of the static streak line. Because the component reads `["streak", habitId]` from the query cache and the optimistic update writes to the same key, the number reacts instantly.
+
+Compared with the snippet in the chapter body, the mutation here takes no argument — `habitId` comes from props and is closed over, so `mutate()` is called with nothing and the `onError`/`onSettled` callbacks read `habitId` from scope rather than from a mutation variable. Either style is fine; capturing from props is the natural fit when the component is already scoped to one habit.
+
+Now the two-part test the exercise asks for:
+
+- **Backend running.** Click the button. The number jumps by one immediately (optimistic write), the `POST` succeeds, and `onSettled` invalidates the key so a refetch replaces your guess with the server's real number. If today was already checked in, your `+1` was wrong, but the server is the source of truth and the refetch quietly corrects it — optimism is a UX nicety, not a correctness mechanism.
+- **Backend stopped.** Kill the Go server and click again. The number still jumps by one (optimistic), then the `fetch` fails, `onError` restores the snapshot from `ctx.prev`, and the "Could not save — rolled back" message appears. The UI never lies for longer than the round trip.
+
+</details>
+
 ---
 
 ## Chapter 13: Frontend part 3, forms and validation
@@ -1626,6 +2367,59 @@ For this project, option 1 is honest and sufficient. We will cover the cross-che
 ### Exercise
 
 Add an `archived` flag to habits. Update the Go struct, run `make gen` (the Makefile from Chapter 10) to regenerate the types, and add a filter to the list page to hide archived habits. Notice how the type flow forces you through every place that needs to change.
+
+<details>
+<summary><strong>Solution</strong></summary>
+
+Start at the database, because the type flow originates there. Add the column to `migrations/0001_init.sql`:
+
+```sql
+CREATE TABLE habits (
+    id          INTEGER PRIMARY KEY AUTOINCREMENT,
+    name        TEXT NOT NULL,
+    schedule    TEXT NOT NULL CHECK (schedule IN ('daily','weekly')),
+    created_at  TEXT NOT NULL,
+    archived    INTEGER NOT NULL DEFAULT 0
+);
+```
+
+SQLite has no boolean type, so `archived` is an integer that is `0` or `1`. Update the `SELECT` columns in `internal/store/queries.sql` to include `archived`, then add the field to the domain struct in `store.go`:
+
+```go
+type Habit struct {
+	ID        int64     `json:"id"`
+	Name      string    `json:"name"`
+	Schedule  string    `json:"schedule"`
+	CreatedAt time.Time `json:"createdAt"`
+	Archived  bool      `json:"archived"`
+}
+```
+
+Run `make gen`. Two things regenerate: `sqlc` rebuilds `internal/store/gen` with `archived` on its row types (as an `int64`, which you convert with `row.Archived != 0` in the `sqlite.go` mapping functions), and `tygo` rewrites `frontend/src/types/api.ts`:
+
+```ts
+export interface Habit {
+  id: number;
+  name: string;
+  schedule: string;
+  createdAt: string;
+  archived: boolean;
+}
+```
+
+Now the part the exercise wants you to feel. You did not touch the frontend, but the frontend's types changed. Filter the list page to hide archived habits:
+
+```tsx
+const habits = await listHabits();
+const active = habits.filter((h) => !h.archived);
+// render `active` instead of `habits`
+```
+
+Here is the lesson. Adding a field is *additive*, so TypeScript does not force your hand — the list page compiled fine before you added the filter, silently showing archived habits. The type system tells you the field **exists**; it cannot tell you that you **care**. Contrast that with a breaking change: if you had *renamed* `name` to `title`, regenerating the types would light up every `.name` access in red until you fixed each one, and `make gen` plus `tsc` would walk you through every site. That is the type flow working as a checklist.
+
+So the honest takeaway is two-sided. Generated types make breaking changes safe — you cannot forget a call site, because the compiler will not let you build. But additive changes (a new optional behaviour, a new flag) still require you to think, because "the code compiles" and "the code does the right thing" are different claims. The generator buys you the first; only you can supply the second.
+
+</details>
 
 ---
 
@@ -1784,6 +2578,73 @@ This test does not prove the backend agrees, but it makes drift visible: any dev
 
 Write tests for `NewHabitForm`. Assert that submitting an empty name shows the error message and does not call the mutation. Assert that submitting a valid name calls the mutation with the right arguments.
 
+<details>
+<summary><strong>Solution</strong></summary>
+
+These tests drive the form the way a user would — type, click — using `@testing-library/user-event`. Add it if you have not: `bun add -D @testing-library/user-event`. The file assumes the Chapter 13 form (react-hook-form + Zod) lives at `components/new-habit-form.tsx`.
+
+```tsx
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen, waitFor } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { NewHabitForm } from "./new-habit-form";
+import * as api from "@/lib/api";
+
+function renderWithClient(ui: React.ReactElement) {
+  const client = new QueryClient({
+    defaultOptions: { queries: { retry: false } },
+  });
+  return render(
+    <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+  );
+}
+
+describe("NewHabitForm", () => {
+  beforeEach(() => {
+    vi.restoreAllMocks();
+  });
+
+  it("shows an error and does not submit when the name is empty", async () => {
+    const create = vi.spyOn(api, "createHabit");
+    const user = userEvent.setup();
+    renderWithClient(<NewHabitForm />);
+
+    await user.click(screen.getByRole("button", { name: /create/i }));
+
+    expect(await screen.findByText("Name is required")).toBeInTheDocument();
+    expect(create).not.toHaveBeenCalled();
+  });
+
+  it("submits the entered values when valid", async () => {
+    const create = vi.spyOn(api, "createHabit").mockResolvedValue({
+      id: 1,
+      name: "Read",
+      schedule: "daily",
+      createdAt: "2026-05-19T00:00:00Z",
+    });
+    const user = userEvent.setup();
+    renderWithClient(<NewHabitForm />);
+
+    await user.type(screen.getByPlaceholderText(/habit name/i), "Read");
+    await user.click(screen.getByRole("button", { name: /create/i }));
+
+    await waitFor(() =>
+      expect(create).toHaveBeenCalledWith({ name: "Read", schedule: "daily" }),
+    );
+    expect(create).toHaveBeenCalledTimes(1);
+  });
+});
+```
+
+The first test is the one that proves the validation is wired correctly, and it is easy to get subtly wrong. The assertion that earns its keep is `expect(create).not.toHaveBeenCalled()` — *not* merely that the error text appears. A form could show "Name is required" and **still** fire the mutation; both must be true for the form to be safe. Because the Zod resolver runs before react-hook-form invokes our `onSubmit`, an invalid submit never reaches `mutation.mutate`, so the spy stays untouched. We do not even need to mock `createHabit`'s return value in that test, since it should never be called.
+
+The second test asserts the *arguments*, not just that something was called. `toHaveBeenCalledWith({ name: "Read", schedule: "daily" })` pins the contract: the form must pass the typed `HabitInput`, with `schedule` defaulting to `"daily"`, in the exact shape the API expects. The `waitFor` is necessary because submission goes through the async resolver before the handler runs — asserting synchronously right after the click would race the validation.
+
+Both tests query by role and placeholder text, never by class name or test id, so they survive any restyling of the form and break only if the behaviour a user can see actually changes. That is the Chapter 14 principle in practice.
+
+</details>
+
 ---
 
 ## Chapter 15: Mutation testing in TypeScript with Stryker
@@ -1862,6 +2723,57 @@ Now the mutant dies because the specific message is no longer produced.
 ### Exercise
 
 Run `bun run mutate` and pick three survivors. For each, decide: is it a weak test, an equivalent mutant, or a real bug? Strengthen the tests for the first category, document the second, and (delight) file a bug if you find the third.
+
+<details>
+<summary><strong>Solution</strong></summary>
+
+As with gremlins, the exact survivors depend on your tests, so this is the classification *method* applied to three representative survivors from `src/lib/schemas.ts`.
+
+**Survivor 1 — weak test.** Stryker mutates the boundary:
+
+```
+Survived  src/lib/schemas.ts:6:18  .max(80) => .max(81)
+```
+
+If this lives, no test pins the boundary: your suite checks that a short name passes and a wildly long one fails, but nothing distinguishes 80 from 81. That is a **weak test**. Strengthen it with the two cases that straddle the line:
+
+```ts
+it("accepts a name of exactly 80 characters", () => {
+  expect(habitSchema.safeParse({ name: "a".repeat(80), schedule: "daily" }).success).toBe(true);
+});
+
+it("rejects a name of 81 characters", () => {
+  expect(habitSchema.safeParse({ name: "a".repeat(81), schedule: "daily" }).success).toBe(false);
+});
+```
+
+Now `.max(81)` lets the 81-character name through, the second test fails, and the mutant dies. Boundary mutants almost always mean "test the boundary, not the middle."
+
+**Survivor 2 — equivalent mutant.** Stryker mutates a message string:
+
+```
+Survived  src/lib/schemas.ts:5:21  "Name is required" => ""
+```
+
+If no test asserts on that specific text, blanking it changes nothing observable, so the mutant survives. You have a choice, and it is a judgement call rather than a reflex. If the exact wording is part of your product (the UI shows it, a translation depends on it), assert it and the mutant becomes killable — it was a weak test after all. If the wording is incidental, this is effectively an **equivalent mutant** for your purposes: killing it buys a brittle string-equality assertion that breaks every time a copywriter touches the text. Document the decision and move on:
+
+```ts
+// We assert the "Name is required" message because the form surfaces it to the
+// user (see new-habit-form.test.tsx). Other Zod messages are not pinned on
+// purpose: Stryker flags them as survivors and we accept that as equivalent.
+```
+
+**Survivor 3 — a real bug (the rare, delightful one).** Suppose you had hand-written a length check elsewhere as `name.length <= 80` but the backend enforces `< 80`, and Stryker mutates `<=` to `<`:
+
+```
+Survived  src/lib/limits.ts:3:24  <= => <
+```
+
+A surviving relational mutant on a comparison you *thought* was tested is a prompt to check the comparison itself. If you discover the two sides of the boundary disagree with the backend (off-by-one at exactly 80), that is not a test problem — it is a **real bug** the weak test was hiding. Fix the code, add the boundary test that proves the fix, and (the exercise's word) take some delight in it: mutation testing just paid for itself by surfacing a defect that 100 percent line coverage was perfectly happy to ignore.
+
+The meta-point ties the two mutation chapters together. The kill ratio is not the deliverable. The deliverable is the three sentences you just wrote — *this one needed a better test, this one is fine as is and here's why, this one was a bug* — because those sentences are what a careful reviewer would have written about your tests anyway. The tool just made the review mechanical.
+
+</details>
 
 ---
 
@@ -2017,6 +2929,29 @@ Before writing any code, write down two answers in your own words:
 
 1. What is the one thing each of the three services is responsible for? One sentence per service.
 2. If you were running HabitForge in production today with 100 users, would you actually split it? Justify with a real metric, not a feeling.
+
+<details>
+<summary><strong>Solution</strong></summary>
+
+There is no single correct wording, but a good answer is concrete and resists hand-waving. Here is one.
+
+**1. One sentence per service.**
+
+- **gateway** — the single public entry point: it routes requests to the right backend and owns cross-cutting concerns (CORS, request IDs, later authentication) so no backend has to.
+- **habits-service** — owns the habits and check-ins data: the source of truth, the only service that writes to the database.
+- **analytics-service** — derives streaks from check-ins: stateless and read-only, it computes and never stores.
+
+If a service needs "and" to describe it, that is a smell. "habits *and* analytics" was one sentence in the monolith; splitting earns its keep only if each half now has a single, clean responsibility — which, here, it does.
+
+**2. Would you split at 100 users? No — and here is the metric, not the feeling.**
+
+Size the actual load. Suppose 100 users each open the app a few times a day and check in once: generously, call it 50 requests per user per day. That is 5,000 requests/day, which is **about 0.06 requests per second** on average, with a peak maybe 10–20× the mean — so low single-digit RPS at the worst minute of the day. A single Go process backed by SQLite serves reads from a local file in well under a millisecond and handles thousands of requests per second on one core. You would be running at well under **one percent of one instance's capacity**.
+
+Now weigh that against Chapter 17's cost list: splitting turns one deploy pipeline into three, one alerting setup into three, and every streak request into a cross-process HTTP call with its own timeout, retry, and partial-failure modes. You would be adding three failure domains and a network hop to a system whose bottleneck is "essentially nothing." None of the five legitimate reasons applies: same scaling profile, same reliability budget, same release cadence, same language, one team (you).
+
+The metric that *would* change the answer: if analytics grew a genuinely expensive computation — say streak math over millions of check-ins that pegged a CPU and started pushing the habits endpoints' p99 latency past your budget — then "analytics starves habits of CPU on the shared box" is a measured reason to extract it. The discipline is to wait for that number to show up in a dashboard, not to architect for it on day one. As the chapter puts it: wait for the pain.
+
+</details>
 
 ---
 
@@ -2270,6 +3205,42 @@ For a learning project, sync is honest. For a real product with multiple readers
 ### Exercise
 
 Add a `GET /longest-streak/{habitID}` endpoint to analytics-service. Reuse the `LongestStreak` function from Chapter 7's exercise. Notice how the absence of a database in this service made the move trivial.
+
+<details>
+<summary><strong>Solution</strong></summary>
+
+When you moved `streak.go` into `analytics-service/internal/streak/` in Step 3, `LongestStreak` came along with it — so it is already `streak.LongestStreak`, no new code in the core. The handler mirrors `getStreak` almost exactly:
+
+```go
+func (a *API) getLongestStreak(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "habitID"), 10, 64)
+	if err != nil {
+		http.Error(w, "invalid id", http.StatusBadRequest)
+		return
+	}
+	checkIns, err := a.Habits.ListCheckIns(r.Context(), id)
+	if err != nil {
+		http.Error(w, "upstream error", http.StatusBadGateway)
+		return
+	}
+	n := streak.LongestStreak(streak.Daily, checkIns)
+	w.Header().Set("Content-Type", "application/json")
+	_ = json.NewEncoder(w).Encode(map[string]int{"longestStreak": n})
+}
+```
+
+Register it next to the existing streak route in `NewRouter`:
+
+```go
+r.Get("/streak/{habitID}", api.getStreak)
+r.Get("/longest-streak/{habitID}", api.getLongestStreak)
+```
+
+That is the whole change, and the exercise's point is *why* it was so small. This handler fetches the same check-ins from the same upstream and feeds them to a different pure function. There is no migration to write, no query to add, no row-type to map, no second service to coordinate with — because analytics-service owns no database. Contrast this with adding the equivalent endpoint back in the monolith of Chapters 6–7: there you would touch `queries.sql`, regenerate `sqlc`, extend the store interface and its SQLite implementation, and only then write the handler.
+
+This is the dividend the chapter has been setting up. Statelessness is what made analytics cheap to extract in the first place (Step 3 moved pure functions untouched), and it is the same property that makes *extending* it cheap now. A service that only reads and computes can grow a new read-and-compute endpoint almost for free. The moment it needed its own stored state — a cache of precomputed streaks, say — this trivial addition would acquire all the persistence machinery we just celebrated not having. The 502-on-upstream-failure handling carries over unchanged for the same reason: the failure modes of "ask habits, then compute" are identical whether you are computing the current streak or the longest one.
+
+</details>
 
 ---
 
