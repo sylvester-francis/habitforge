@@ -1,17 +1,19 @@
 package main
 
 import (
-	"fmt"
+	"log"
 	"net/http"
+	"os"
+	"github.com/sylvester-francis/habit-forge/backend/internal/httpapi"
 )
-
 func main() {
-	http.HandleFunc("/", func(w http.ResponseWriter, r *http.Request) {
-		fmt.Fprintf(w, "habitforge server is running")
-	})
-
-	fmt.Println("listening on :8080")
-	if err := http.ListenAndServe(":8080", nil); err != nil {
-		fmt.Printf("error starting server: %v\n", err)
+	addr := os.Getenv("HABIT_FORGE_ADDR")
+	if addr == "" {
+		addr = ":8080"
+	}
+	r := httpapi.NewRouter()
+	log.Printf("listening on %s", addr)
+	if err := http.ListenAndServe(addr,r); err != nil {
+		log.Fatalf("failed to start server: %v", err)
 	}
 }
