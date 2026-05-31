@@ -1,8 +1,8 @@
 package store
 
 import (
-	"time"
 	"context"
+	"time"
 )
 
 type Habit struct {
@@ -13,10 +13,10 @@ type Habit struct {
 }
 
 type Store interface {
-	CreateHabit(ctx context.Context, name, schedule string) (Habit ,error)
-	ListHabits(ctx context.Context) ([]Habit,error)
-	GetHabit(ctx context.Context, id int64) (Habit,error)
+	CreateHabit(ctx context.Context, name, schedule string) (Habit, error)
+	ListHabits(ctx context.Context) ([]Habit, error)
+	GetHabit(ctx context.Context, id int64) (Habit, error)
 	DeleteHabit(ctx context.Context, id int64) error
-	createCheckIn(ctx context.Context, habitID int64, day time.Time) error
-	ListCheckIns(ctx context.Context, habitID int64) ([]time.Time,error)
+	CreateCheckIn(ctx context.Context, habitID int64, day time.Time) error
+	ListCheckIns(ctx context.Context, habitID int64) ([]time.Time, error)
 }
