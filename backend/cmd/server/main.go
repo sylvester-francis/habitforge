@@ -5,7 +5,7 @@ import (
 	"net/http"
 	"os"
 
-	"github.com/sylvester-francis/habitforge/backend/internal/httpapi"
+	"github.com/sylvester/habitforge/backend/internal/httpapi"
 )
 
 func main() {
