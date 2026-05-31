@@ -1003,7 +1003,7 @@ go test -coverprofile=cover.out ./...
 go tool cover -html=cover.out
 ```
 
-The HTML report shows you exactly which lines ran. Coverage is a *signal*. High coverage with bad assertions proves nothing. Low coverage means you have not exercised parts of the code at all. Neither extreme is healthy.
+The HTML report shows you exactly which lines ran. Coverage is a _signal_. High coverage with bad assertions proves nothing. Low coverage means you have not exercised parts of the code at all. Neither extreme is healthy.
 
 **Principle.** Coverage tells you what was not tested. It does not tell you what was tested well. The next chapter is about a tool that tells you the second thing.
 
@@ -1064,7 +1064,7 @@ The first is the most common, by far.
 
 ### Strengthening tests until mutants die
 
-Suppose the `streak++` mutation survived. That would mean no test asserts on the *count* of the streak; only on whether it is zero or non-zero. Fix by adding a case that asserts the exact count for a long streak. The mutant changes 3 to a different number, and the test catches it.
+Suppose the `streak++` mutation survived. That would mean no test asserts on the _count_ of the streak; only on whether it is zero or non-zero. Fix by adding a case that asserts the exact count for a long streak. The mutant changes 3 to a different number, and the test catches it.
 
 ### Mutation score
 
@@ -1226,7 +1226,7 @@ A `page.tsx` exports a default React component. The filename and folder define t
 Replace `frontend/src/app/page.tsx`:
 
 ```tsx
-import Link from 'next/link';
+import Link from "next/link";
 
 export default function Home() {
   return (
@@ -1251,20 +1251,20 @@ This component runs on the server. There is no `useState`, no event handler, no 
 Create `frontend/src/lib/api.ts`:
 
 ```ts
-import type { Habit, CreateHabitRequest } from '@/types/api';
+import type { Habit, CreateHabitRequest } from "@/types/api";
 
-const BASE = process.env.NEXT_PUBLIC_API_URL ?? 'http://localhost:8080';
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 export async function listHabits(): Promise<Habit[]> {
-  const res = await fetch(`${BASE}/api/habits`, { cache: 'no-store' });
+  const res = await fetch(`${BASE}/api/habits`, { cache: "no-store" });
   if (!res.ok) throw new Error(`listHabits: ${res.status}`);
   return res.json();
 }
 
 export async function createHabit(body: CreateHabitRequest): Promise<Habit> {
   const res = await fetch(`${BASE}/api/habits`, {
-    method: 'POST',
-    headers: { 'Content-Type': 'application/json' },
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
     body: JSON.stringify(body),
   });
   if (!res.ok) throw new Error(`createHabit: ${res.status}`);
@@ -1277,7 +1277,7 @@ A few principles. The base URL comes from an environment variable so it works lo
 Now create `frontend/src/app/habits/page.tsx`:
 
 ```tsx
-import { listHabits } from '@/lib/api';
+import { listHabits } from "@/lib/api";
 
 export default async function HabitsPage() {
   const habits = await listHabits();
@@ -1354,20 +1354,23 @@ bun add @tanstack/react-query
 Create `frontend/src/app/providers.tsx`:
 
 ```tsx
-'use client';
+"use client";
 
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { useState, type ReactNode } from 'react';
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { useState, type ReactNode } from "react";
 
 export function Providers({ children }: { children: ReactNode }) {
-  const [client] = useState(() => new QueryClient({
-    defaultOptions: {
-      queries: {
-        staleTime: 30_000,
-        refetchOnWindowFocus: false,
-      },
-    },
-  }));
+  const [client] = useState(
+    () =>
+      new QueryClient({
+        defaultOptions: {
+          queries: {
+            staleTime: 30_000,
+            refetchOnWindowFocus: false,
+          },
+        },
+      }),
+  );
   return <QueryClientProvider client={client}>{children}</QueryClientProvider>;
 }
 ```
@@ -1375,9 +1378,13 @@ export function Providers({ children }: { children: ReactNode }) {
 Wrap your app in `frontend/src/app/layout.tsx`:
 
 ```tsx
-import { Providers } from './providers';
+import { Providers } from "./providers";
 
-export default function RootLayout({ children }: { children: React.ReactNode }) {
+export default function RootLayout({
+  children,
+}: {
+  children: React.ReactNode;
+}) {
   return (
     <html lang="en">
       <body>
@@ -1395,14 +1402,14 @@ Notice the providers file is a client component but the layout itself is not. Th
 Create `frontend/src/components/habit-list.tsx`:
 
 ```tsx
-'use client';
+"use client";
 
-import { useQuery } from '@tanstack/react-query';
-import { listHabits } from '@/lib/api';
+import { useQuery } from "@tanstack/react-query";
+import { listHabits } from "@/lib/api";
 
 export function HabitList() {
   const { data, isLoading, error } = useQuery({
-    queryKey: ['habits'],
+    queryKey: ["habits"],
     queryFn: listHabits,
   });
 
@@ -1427,22 +1434,22 @@ The `queryKey` is the cache key. Any component using the same key shares the sam
 ### Mutations
 
 ```tsx
-'use client';
+"use client";
 
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { useState } from 'react';
-import { createHabit } from '@/lib/api';
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { useState } from "react";
+import { createHabit } from "@/lib/api";
 
 export function NewHabitForm() {
   const qc = useQueryClient();
-  const [name, setName] = useState('');
-  const [schedule, setSchedule] = useState<'daily' | 'weekly'>('daily');
+  const [name, setName] = useState("");
+  const [schedule, setSchedule] = useState<"daily" | "weekly">("daily");
 
   const mutation = useMutation({
     mutationFn: createHabit,
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['habits'] });
-      setName('');
+      qc.invalidateQueries({ queryKey: ["habits"] });
+      setName("");
     },
   });
 
@@ -1456,7 +1463,7 @@ export function NewHabitForm() {
       />
       <select
         value={schedule}
-        onChange={(e) => setSchedule(e.target.value as 'daily' | 'weekly')}
+        onChange={(e) => setSchedule(e.target.value as "daily" | "weekly")}
         className="border rounded px-2 py-1"
       >
         <option value="daily">Daily</option>
@@ -1467,7 +1474,7 @@ export function NewHabitForm() {
         disabled={mutation.isPending || !name}
         className="bg-black text-white px-4 py-2 rounded disabled:opacity-50"
       >
-        {mutation.isPending ? 'Creating...' : 'Create'}
+        {mutation.isPending ? "Creating..." : "Create"}
       </button>
       {mutation.error && (
         <p className="text-red-600 text-sm">Could not create habit</p>
@@ -1489,16 +1496,16 @@ For a check-in, the user expects instant feedback. The mutation can update the c
 const checkIn = useMutation({
   mutationFn: (habitId: number) => createCheckIn(habitId),
   onMutate: async (habitId) => {
-    await qc.cancelQueries({ queryKey: ['streak', habitId] });
-    const prev = qc.getQueryData<{ streak: number }>(['streak', habitId]);
-    qc.setQueryData(['streak', habitId], { streak: (prev?.streak ?? 0) + 1 });
+    await qc.cancelQueries({ queryKey: ["streak", habitId] });
+    const prev = qc.getQueryData<{ streak: number }>(["streak", habitId]);
+    qc.setQueryData(["streak", habitId], { streak: (prev?.streak ?? 0) + 1 });
     return { prev };
   },
   onError: (_err, habitId, ctx) => {
-    if (ctx?.prev) qc.setQueryData(['streak', habitId], ctx.prev);
+    if (ctx?.prev) qc.setQueryData(["streak", habitId], ctx.prev);
   },
   onSettled: (_data, _err, habitId) => {
-    qc.invalidateQueries({ queryKey: ['streak', habitId] });
+    qc.invalidateQueries({ queryKey: ["streak", habitId] });
   },
 });
 ```
@@ -1526,14 +1533,14 @@ bun add react-hook-form zod @hookform/resolvers
 Create `frontend/src/lib/schemas.ts`:
 
 ```ts
-import { z } from 'zod';
+import { z } from "zod";
 
 export const habitSchema = z.object({
   name: z
     .string()
-    .min(1, 'Name is required')
-    .max(80, 'Name must be 80 characters or fewer'),
-  schedule: z.enum(['daily', 'weekly']),
+    .min(1, "Name is required")
+    .max(80, "Name must be 80 characters or fewer"),
+  schedule: z.enum(["daily", "weekly"]),
 });
 
 export type HabitInput = z.infer<typeof habitSchema>;
@@ -1544,13 +1551,13 @@ export type HabitInput = z.infer<typeof habitSchema>;
 ### The form component
 
 ```tsx
-'use client';
+"use client";
 
-import { useForm } from 'react-hook-form';
-import { zodResolver } from '@hookform/resolvers/zod';
-import { useMutation, useQueryClient } from '@tanstack/react-query';
-import { createHabit } from '@/lib/api';
-import { habitSchema, type HabitInput } from '@/lib/schemas';
+import { useForm } from "react-hook-form";
+import { zodResolver } from "@hookform/resolvers/zod";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
+import { createHabit } from "@/lib/api";
+import { habitSchema, type HabitInput } from "@/lib/schemas";
 
 export function NewHabitForm() {
   const qc = useQueryClient();
@@ -1561,13 +1568,13 @@ export function NewHabitForm() {
     formState: { errors, isSubmitting },
   } = useForm<HabitInput>({
     resolver: zodResolver(habitSchema),
-    defaultValues: { name: '', schedule: 'daily' },
+    defaultValues: { name: "", schedule: "daily" },
   });
 
   const mutation = useMutation({
     mutationFn: createHabit,
     onSuccess: () => {
-      qc.invalidateQueries({ queryKey: ['habits'] });
+      qc.invalidateQueries({ queryKey: ["habits"] });
       reset();
     },
   });
@@ -1579,7 +1586,7 @@ export function NewHabitForm() {
     >
       <div>
         <input
-          {...register('name')}
+          {...register("name")}
           placeholder="Habit name"
           className="border rounded px-2 py-1 w-full"
         />
@@ -1587,10 +1594,7 @@ export function NewHabitForm() {
           <p className="text-red-600 text-sm">{errors.name.message}</p>
         )}
       </div>
-      <select
-        {...register('schedule')}
-        className="border rounded px-2 py-1"
-      >
+      <select {...register("schedule")} className="border rounded px-2 py-1">
         <option value="daily">Daily</option>
         <option value="weekly">Weekly</option>
       </select>
@@ -1638,19 +1642,19 @@ bun add -D vitest @testing-library/react @testing-library/jest-dom jsdom @vitejs
 Create `frontend/vitest.config.ts`:
 
 ```ts
-import { defineConfig } from 'vitest/config';
-import react from '@vitejs/plugin-react';
-import path from 'node:path';
+import { defineConfig } from "vitest/config";
+import react from "@vitejs/plugin-react";
+import path from "node:path";
 
 export default defineConfig({
   plugins: [react()],
   test: {
-    environment: 'jsdom',
+    environment: "jsdom",
     globals: true,
-    setupFiles: ['./vitest.setup.ts'],
+    setupFiles: ["./vitest.setup.ts"],
   },
   resolve: {
-    alias: { '@': path.resolve(__dirname, './src') },
+    alias: { "@": path.resolve(__dirname, "./src") },
   },
 });
 ```
@@ -1658,7 +1662,7 @@ export default defineConfig({
 Create `frontend/vitest.setup.ts`:
 
 ```ts
-import '@testing-library/jest-dom/vitest';
+import "@testing-library/jest-dom/vitest";
 ```
 
 Add a script to `package.json`:
@@ -1676,30 +1680,33 @@ Start with the Zod schema. Pure logic is the easiest to test and where mutation 
 Create `frontend/src/lib/schemas.test.ts`:
 
 ```ts
-import { describe, it, expect } from 'vitest';
-import { habitSchema } from './schemas';
+import { describe, it, expect } from "vitest";
+import { habitSchema } from "./schemas";
 
-describe('habitSchema', () => {
-  it('accepts a valid input', () => {
-    const result = habitSchema.safeParse({ name: 'Read', schedule: 'daily' });
+describe("habitSchema", () => {
+  it("accepts a valid input", () => {
+    const result = habitSchema.safeParse({ name: "Read", schedule: "daily" });
     expect(result.success).toBe(true);
   });
 
-  it('rejects an empty name', () => {
-    const result = habitSchema.safeParse({ name: '', schedule: 'daily' });
+  it("rejects an empty name", () => {
+    const result = habitSchema.safeParse({ name: "", schedule: "daily" });
     expect(result.success).toBe(false);
     if (!result.success) {
-      expect(result.error.issues[0]?.message).toBe('Name is required');
+      expect(result.error.issues[0]?.message).toBe("Name is required");
     }
   });
 
-  it('rejects a name over 80 characters', () => {
-    const result = habitSchema.safeParse({ name: 'a'.repeat(81), schedule: 'daily' });
+  it("rejects a name over 80 characters", () => {
+    const result = habitSchema.safeParse({
+      name: "a".repeat(81),
+      schedule: "daily",
+    });
     expect(result.success).toBe(false);
   });
 
-  it('rejects an unknown schedule', () => {
-    const result = habitSchema.safeParse({ name: 'Read', schedule: 'hourly' });
+  it("rejects an unknown schedule", () => {
+    const result = habitSchema.safeParse({ name: "Read", schedule: "hourly" });
     expect(result.success).toBe(false);
   });
 });
@@ -1714,11 +1721,11 @@ Run `bun run test`. You should see all four pass.
 Create `frontend/src/components/habit-list.test.tsx`:
 
 ```tsx
-import { describe, it, expect, vi, beforeEach } from 'vitest';
-import { render, screen } from '@testing-library/react';
-import { QueryClient, QueryClientProvider } from '@tanstack/react-query';
-import { HabitList } from './habit-list';
-import * as api from '@/lib/api';
+import { describe, it, expect, vi, beforeEach } from "vitest";
+import { render, screen } from "@testing-library/react";
+import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { HabitList } from "./habit-list";
+import * as api from "@/lib/api";
 
 function renderWithClient(ui: React.ReactElement) {
   const client = new QueryClient({
@@ -1729,23 +1736,28 @@ function renderWithClient(ui: React.ReactElement) {
   );
 }
 
-describe('HabitList', () => {
+describe("HabitList", () => {
   beforeEach(() => {
     vi.restoreAllMocks();
   });
 
-  it('renders an empty state', async () => {
-    vi.spyOn(api, 'listHabits').mockResolvedValue([]);
+  it("renders an empty state", async () => {
+    vi.spyOn(api, "listHabits").mockResolvedValue([]);
     renderWithClient(<HabitList />);
     expect(await screen.findByText(/no habits yet/i)).toBeInTheDocument();
   });
 
-  it('renders fetched habits', async () => {
-    vi.spyOn(api, 'listHabits').mockResolvedValue([
-      { id: 1, name: 'Read', schedule: 'daily', createdAt: '2026-05-19T00:00:00Z' },
+  it("renders fetched habits", async () => {
+    vi.spyOn(api, "listHabits").mockResolvedValue([
+      {
+        id: 1,
+        name: "Read",
+        schedule: "daily",
+        createdAt: "2026-05-19T00:00:00Z",
+      },
     ]);
     renderWithClient(<HabitList />);
-    expect(await screen.findByText('Read')).toBeInTheDocument();
+    expect(await screen.findByText("Read")).toBeInTheDocument();
   });
 });
 ```
@@ -1759,7 +1771,7 @@ Three principles in this file. First, queries should be by accessible role or te
 Earlier we accepted the duplication of validation between Go and TypeScript. Write a test that pins the contract. In `frontend/src/lib/schemas.test.ts`:
 
 ```ts
-it('schema constants match the backend (pinned)', () => {
+it("schema constants match the backend (pinned)", () => {
   // These values are also enforced in backend/internal/httpapi/validation.go.
   // If you change one, change both, and update this test.
   expect(habitSchema.shape.name.maxLength).toBe(80);
@@ -1786,10 +1798,10 @@ Create `frontend/stryker.config.mjs`:
 
 ```js
 export default {
-  testRunner: 'vitest',
-  reporters: ['progress', 'clear-text', 'html'],
-  mutate: ['src/lib/**/*.ts', '!src/lib/**/*.test.ts'],
-  coverageAnalysis: 'perTest',
+  testRunner: "vitest",
+  reporters: ["progress", "clear-text", "html"],
+  mutate: ["src/lib/**/*.ts", "!src/lib/**/*.test.ts"],
+  coverageAnalysis: "perTest",
   thresholds: { high: 80, low: 60, break: null },
 };
 ```
@@ -1824,12 +1836,12 @@ Suppose Stryker mutates `.min(1, ...)` to `.min(0, ...)` and the mutant survives
 A common cause is that the test checked `success === false` but did not assert on which validation failed. With the mutation, the empty string passes the `min(0)` check but might still fail somewhere else, and the test passes. Tighten the assertion:
 
 ```ts
-it('rejects an empty name with the right message', () => {
-  const result = habitSchema.safeParse({ name: '', schedule: 'daily' });
+it("rejects an empty name with the right message", () => {
+  const result = habitSchema.safeParse({ name: "", schedule: "daily" });
   expect(result.success).toBe(false);
   if (!result.success) {
     expect(result.error.issues).toContainEqual(
-      expect.objectContaining({ message: 'Name is required' }),
+      expect.objectContaining({ message: "Name is required" }),
     );
   }
 });
@@ -1914,11 +1926,11 @@ Concrete exercises in increasing difficulty:
 
 ### Reading material
 
-For Go: *The Go Programming Language* by Donovan and Kernighan is still the best book. The standard library documentation at pkg.go.dev is unusually well-written. The Go blog has essays on specific topics worth reading in full (the error handling and context articles especially).
+For Go: _The Go Programming Language_ by Donovan and Kernighan is still the best book. The standard library documentation at pkg.go.dev is unusually well-written. The Go blog has essays on specific topics worth reading in full (the error handling and context articles especially).
 
-For TypeScript and React: the official React docs at react.dev are the modern source of truth and well-paced. *Effective TypeScript* by Dan Vanderkam is the closest equivalent to the Go book above. The TanStack Query docs are worth a full read.
+For TypeScript and React: the official React docs at react.dev are the modern source of truth and well-paced. _Effective TypeScript_ by Dan Vanderkam is the closest equivalent to the Go book above. The TanStack Query docs are worth a full read.
 
-For testing philosophy: *Working Effectively with Unit Tests* by Jay Fields and Kent Beck's *Test-Driven Development by Example* are short and still relevant. The Google Testing Blog archive is gold.
+For testing philosophy: _Working Effectively with Unit Tests_ by Jay Fields and Kent Beck's _Test-Driven Development by Example_ are short and still relevant. The Google Testing Blog archive is gold.
 
 For mutation testing specifically: the original paper by DeMillo, Lipton, and Sayward (1978) is short and readable. The `gremlins` and Stryker docs both link to it.
 
