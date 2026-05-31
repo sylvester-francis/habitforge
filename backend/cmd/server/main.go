@@ -4,8 +4,10 @@ import (
 	"log"
 	"net/http"
 	"os"
-	"github.com/sylvester-francis/habit-forge/backend/internal/httpapi"
+
+	"github.com/sylvester-francis/habitforge/backend/internal/httpapi"
 )
+
 func main() {
 	addr := os.Getenv("HABIT_FORGE_ADDR")
 	if addr == "" {
@@ -13,7 +15,7 @@ func main() {
 	}
 	r := httpapi.NewRouter()
 	log.Printf("listening on %s", addr)
-	if err := http.ListenAndServe(addr,r); err != nil {
+	if err := http.ListenAndServe(addr, r); err != nil {
 		log.Fatalf("failed to start server: %v", err)
 	}
 }
