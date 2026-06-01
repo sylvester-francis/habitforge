@@ -11,6 +11,7 @@ import (
 	"time"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/sylvester/habitforge/backend/internal/habit"
 )
 
 func writeJSON(w http.ResponseWriter, status int, v any) {
@@ -101,4 +102,28 @@ func (a *API) createCheckIn(w http.ResponseWriter, r *http.Request) {
 		return
 	}
 	w.WriteHeader(http.StatusCreated)
+}
+
+func (a *API) habitStreak(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+	h, err := a.Store.GetHabit(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "habit not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load habit")
+		return
+	}
+	checkIns, err := a.Store.ListCheckIns(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load habit")
+		return
+	}
+	n := habit.CurrentStreak(habit.Schedule(h.Schedule), time.Now().UTC(), checkIns)
+	writeJSON(w, http.StatusOK, map[string]int{"streak": n})
 }

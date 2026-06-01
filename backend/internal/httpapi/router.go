@@ -40,6 +40,7 @@ func NewRouter(api *API) http.Handler {
 		r.Get("/{id}", api.getHabit)
 		r.Delete("/{id}", api.deleteHabit)
 		r.Post("/{id}/checkins", api.createCheckIn)
+		r.Get("/{id}/streak", api.habitStreak)
 	})
 	return r
 }
