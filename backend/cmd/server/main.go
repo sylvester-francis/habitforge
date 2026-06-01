@@ -6,6 +6,7 @@ import (
 	"os"
 
 	"github.com/sylvester/habitforge/backend/internal/httpapi"
+	"github.com/sylvester/habitforge/backend/internal/store"
 )
 
 func main() {
@@ -13,9 +14,13 @@ func main() {
 	if addr == "" {
 		addr = ":8080"
 	}
-	r := httpapi.NewRouter()
+	s, err := store.OpenSQLite("habitforge.db")
+	if err != nil {
+		log.Fatalf("open store: %v", err)
+	}
+	r := httpapi.NewRouter(&httpapi.API{Store: s})
 	log.Printf("listening on %s", addr)
 	if err := http.ListenAndServe(addr, r); err != nil {
-		log.Fatalf("failed to start server: %v", err)
+		log.Fatalf("failed to start the server: %v", err)
 	}
 }
