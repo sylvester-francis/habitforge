@@ -1176,7 +1176,64 @@ Notice what the streak computation does *not* do: it never reads the clock, neve
 
 ### Wiring streaks into the API
 
-Add a route `GET /api/habits/{id}/streak` that returns `{ "streak": N }`. The handler fetches the habit, fetches its check-ins, calls `habit.CurrentStreak`, and returns the result.
+`CurrentStreak` is pure and tested, but nothing calls it over HTTP yet. We add a route `GET /api/habits/{id}/streak` that returns `{ "streak": N }`. The handler is the *impure shell* around the pure core: it does the database reads and reads the clock, then hands clean data to `CurrentStreak`.
+
+Add this method to `handlers.go`:
+
+```go
+func (a *API) habitStreak(w http.ResponseWriter, r *http.Request) {
+	id, err := strconv.ParseInt(chi.URLParam(r, "id"), 10, 64)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, "invalid id")
+		return
+	}
+
+	h, err := a.Store.GetHabit(r.Context(), id)
+	if errors.Is(err, sql.ErrNoRows) {
+		writeError(w, http.StatusNotFound, "habit not found")
+		return
+	}
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load habit")
+		return
+	}
+
+	checkIns, err := a.Store.ListCheckIns(r.Context(), id)
+	if err != nil {
+		writeError(w, http.StatusInternalServerError, "could not load check-ins")
+		return
+	}
+
+	n := habit.CurrentStreak(habit.Schedule(h.Schedule), time.Now().UTC(), checkIns)
+	writeJSON(w, http.StatusOK, map[string]int{"streak": n})
+}
+```
+
+This needs one new import in `handlers.go`: `github.com/yourname/habitforge/backend/internal/habit`.
+
+Then register it in `router.go`, inside the `/api/habits` route block:
+
+```go
+r.Get("/{id}/streak", api.habitStreak)
+```
+
+The decisions that matter:
+
+- **Two store calls, not one.** `CurrentStreak` needs both the *schedule* (which lives on the `Habit`) and the *check-ins* (a separate query returning `[]time.Time`). So we fetch the habit first — which also gives us the `404` for free — then its check-ins. A habit with zero check-ins is not an error; it simply yields a streak of `0`.
+- **The named-type conversion.** `h.Schedule` is a plain `string`, but `CurrentStreak` wants a `habit.Schedule`. They share an underlying type (`type Schedule string`), but Go does not convert named types implicitly, so we write `habit.Schedule(h.Schedule)` explicitly. This is Go keeping `"daily"`-the-string and `Daily`-the-`Schedule` from being silently interchangeable.
+- **The clock lives in the handler.** `time.Now().UTC()` is read here and passed *into* the pure function. This is the other end of the "server owns the clock" decision from `createCheckIn`: the impure call stays at the boundary so the streak logic remains a pure, testable `int in, int out`.
+- **`map[string]int` for a one-field response.** It is the lightest thing that serializes to `{"streak": N}`. If this response grew more fields — or you wanted it in the generated Go→TS contract of Chapter 10 — you would promote it to a named struct (`type StreakResponse struct { Streak int \`json:"streak"\` }`).
+
+**Principle.** The pure core takes data; the impure shell fetches it. A handler's job is to gather inputs, call one clear function, and serialize the result — not to contain the logic itself.
+
+Exercise the endpoint:
+
+```bash
+curl -s -X POST localhost:8080/api/habits -d '{"name":"Read","schedule":"daily"}'  # create id 1
+curl -s -X POST localhost:8080/api/habits/1/checkins                                # check in today
+curl -s localhost:8080/api/habits/1/streak                                          # {"streak":1}
+curl -s localhost:8080/api/habits/999/streak                                        # 404, "habit not found"
+```
 
 ### Exercise
 
@@ -3355,7 +3412,30 @@ func propagateRequestID(next http.Handler) http.Handler {
 }
 ```
 
-In the backend services, configure chi to respect an incoming `X-Request-ID` rather than always generating a new one. Replace `middleware.RequestID` with a small custom middleware that reads the header if present, otherwise generates one.
+In the backend services, you want chi to respect an incoming `X-Request-ID` rather than always minting a new one. The good news: chi's `middleware.RequestID` already does exactly this. It reads the header named by `middleware.RequestIDHeader` (which defaults to `X-Request-Id`) and only generates an ID when that header is absent:
+
+```go
+// from chi's middleware/request_id.go
+requestID := r.Header.Get(RequestIDHeader)
+if requestID == "" {
+    requestID = fmt.Sprintf("%s-%06d", prefix, myid)
+}
+```
+
+So as long as the gateway propagates the header — which `propagateRequestID` above does — the `r.Use(middleware.RequestID)` you already have in each service picks it up automatically. No replacement needed; keep `middleware.RequestID` where it is.
+
+The one thing chi does *not* do is echo the ID back on the response, which is handy for client-side debugging. If you want that, add a tiny middleware and register it after `RequestID`:
+
+```go
+func echoRequestID(next http.Handler) http.Handler {
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if reqID := middleware.GetReqID(r.Context()); reqID != "" {
+			w.Header().Set("X-Request-ID", reqID)
+		}
+		next.ServeHTTP(w, r)
+	})
+}
+```
 
 **Principle.** A request ID is the cheapest observability investment you can make. Generate it once at the edge, propagate it everywhere, log it in every line. When something breaks you can trace the request through every hop with one grep.
 
@@ -3463,6 +3543,30 @@ ENTRYPOINT ["/server"]
 ```
 
 `CGO_ENABLED=0` produces a static binary that runs on `distroless/static`. The final image is small and contains no shell, which limits the blast radius if a vulnerability ever lets someone exec inside it.
+
+The frontend does *not* follow the Go pattern — it needs a Node/Bun build, not a static binary. Create `frontend/Dockerfile`:
+
+```dockerfile
+# frontend/Dockerfile
+FROM oven/bun:1 AS build
+WORKDIR /app
+COPY package.json bun.lock ./
+RUN bun install --frozen-lockfile
+COPY . .
+RUN bun run build
+
+FROM oven/bun:1
+WORKDIR /app
+ENV NODE_ENV=production
+COPY --from=build /app/.next ./.next
+COPY --from=build /app/public ./public
+COPY --from=build /app/node_modules ./node_modules
+COPY --from=build /app/package.json ./package.json
+EXPOSE 3000
+CMD ["bun", "run", "start"]
+```
+
+Same two-stage idea as the Go services — build in a fat image, copy only what runtime needs into a lean one — but the artifacts are Next.js's `.next` build output and `node_modules` rather than a single binary. If your app has no `public/` directory yet, either create an empty one or drop that `COPY` line, since Docker fails on a missing copy source.
 
 Run `docker compose up --build`. Open http://localhost:3000. The frontend talks to the gateway, the gateway fans out, and you no longer have to remember which port runs which service.
 
