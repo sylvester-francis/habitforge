@@ -96,8 +96,8 @@ The SQLite database (`habitforge.db`) is created on first run.
 
 ```bash
 cd frontend
-npm install
-npm run dev                  # http://localhost:3000
+bun install
+bun run dev                  # http://localhost:3000
 ```
 
 ## API
