@@ -1,6 +1,6 @@
-\import type { Habit, CreateHabitRequest, StreakResponse } from "@/types/api";
+import type { Habit, CreateHabitRequest, StreakResponse } from "@/types/api";
 
-const BASE - process.env.NEXT_PUBLIC_URL ?? "http://localhost:8080";
+const BASE = process.env.NEXT_PUBLIC_URL ?? "http://localhost:8080";
 
 export async function listHabits(): Promise<Habit[]> {
     const res = await fetch(`${BASE}/api/habits`, { cache: "no-store" });
@@ -28,4 +28,11 @@ export async function getStreak(id: number): Promise<StreakResponse> {
     const res = await fetch(`${BASE}/api/habits/${id}/streak`, { cache: "no-store" });
     if (!res.ok) throw new Error(`getStreak: ${res.status}`);
     return res.json();
+}
+
+export async function createCheckIn(habitId: number): Promise<void> {
+    const res = await fetch(`${BASE}/api/habits/${habitId}/checkins`, {
+        method: "POST",
+    });
+    if (!res.ok) throw new Error(`createCheckIn: ${res.status}`);
 }
