@@ -1,6 +1,6 @@
 import type { Habit, CreateHabitRequest, StreakResponse } from "@/types/api";
 
-const BASE = process.env.NEXT_PUBLIC_URL ?? "http://localhost:8080";
+const BASE = process.env.NEXT_PUBLIC_API_URL ?? "http://localhost:8080";
 
 export async function listHabits(): Promise<Habit[]> {
     const res = await fetch(`${BASE}/api/habits`, { cache: "no-store" });
