@@ -17,18 +17,21 @@ export function NewHabitForm() {
         },
     });
 
+    const fieldClasses =
+        "rounded-lg border border-iron-700 bg-iron-950/60 px-3 py-2 text-cream placeholder:text-cream-faint outline-none transition-colors focus:border-ember focus:ring-2 focus:ring-ember/30";
+
     return (
-        <div className="space-y-2">
+        <div className="flex flex-col gap-3 sm:flex-row sm:items-center">
             <input
                 value={name}
                 onChange={(e) => setName(e.target.value)}
-                placeholder="Habit name"
-                className="border rounded px-2 py-1 w-full"
+                placeholder="e.g. Read 20 pages"
+                className={`${fieldClasses} w-full sm:flex-1`}
             />
             <select
                 value={schedule}
                 onChange={(e) => setSchedule(e.target.value as "daily" | "weekly")}
-                className="border rounded px-2 py-1"
+                className={`${fieldClasses} cursor-pointer`}
             >
                 <option value="daily">Daily</option>
                 <option value="weekly">Weekly</option>
@@ -36,12 +39,14 @@ export function NewHabitForm() {
             <button
                 onClick={() => mutation.mutate({ name, schedule })}
                 disabled={mutation.isPending || !name}
-                className="bg-black text-white px-4 py-2 rounded disabled:opacity-50"
+                className="rounded-lg bg-ember px-5 py-2 font-medium text-ash transition-all hover:bg-ember-glow disabled:cursor-not-allowed disabled:opacity-40"
             >
-                {mutation.isPending ? "Creating..." : "Create"}
+                {mutation.isPending ? "Forging…" : "Forge"}
             </button>
             {mutation.error && (
-                <p className="text-red-600 text-sm">Could not create habit</p>
+                <p className="font-mono text-xs text-red-400 sm:hidden">
+                    Could not create habit
+                </p>
             )}
         </div>
     );
