@@ -1569,8 +1569,10 @@ Make sure your `GOPATH/bin` is on your `PATH`.
 From `backend/`:
 
 ```bash
-gremlins unleash ./internal/habit/...
+gremlins unleash ./internal/habit/
 ```
+
+Pass the package **directory**, not a `./...` pattern — `unleash` appends its own `/...` when gathering coverage, so `./internal/habit/...` becomes `./internal/habit/.../...` and matches no packages.
 
 It will compile your code, mutate it line by line, and run your tests against each mutant. The output looks like:
 
@@ -1611,6 +1613,13 @@ Create `backend/.gremlins.yaml` to scope and tune runs:
 silent: false
 workers: 4
 test-cpu: 1
+unleash:
+  # This package's tests run in milliseconds, so gremlins' auto-computed
+  # timeout is too tight and healthy mutants get spuriously reported as
+  # TIMED OUT. Raise the coefficient so each mutant gets a realistic budget.
+  # (timeout-coefficient is an `unleash` subcommand flag, so it nests here —
+  # placed at the top level it is silently ignored.)
+  timeout-coefficient: 50
 mutants:
   conditionals_boundary:
     enabled: true
@@ -1622,11 +1631,11 @@ mutants:
     enabled: true
 ```
 
-The mutators correspond to categories of changes. Boundary mutations (`<` to `<=`) are particularly valuable for streak math.
+The mutators correspond to categories of changes. Boundary mutations (`<` to `<=`) are particularly valuable for streak math. The `timeout-coefficient` matters more than it looks: with a sub-second test suite, gremlins' default timeout is so tight that healthy mutants spuriously report as `TIMED OUT` (you will see all mutants time out in well under a second — the giveaway that nothing actually ran long). Raising it gives a stable, reproducible run with no flag-juggling.
 
 ### Exercise
 
-Run `gremlins unleash ./internal/habit/...` and record the kill ratio. Pick one surviving mutant, write a new test that kills it, and re-run. Do this until the ratio is above 85 percent or every survivor is genuinely equivalent. Note in a comment which survivors are equivalent and why.
+Run `gremlins unleash ./internal/habit/` and record the kill ratio. Pick one surviving mutant, write a new test that kills it, and re-run. Do this until the ratio is above 85 percent or every survivor is genuinely equivalent. Note in a comment which survivors are equivalent and why.
 
 <details>
 <summary><strong>Solution</strong></summary>
