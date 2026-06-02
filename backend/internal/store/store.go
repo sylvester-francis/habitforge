@@ -12,6 +12,17 @@ type Habit struct {
 	CreatedAt time.Time `json:"createdAt"`
 }
 
+// CreateHabitRequest is the JSON body of POST /api/habits.
+type CreateHabitRequest struct {
+	Name     string `json:"name"`
+	Schedule string `json:"schedule"`
+}
+
+// StreakResponse is returned for streak queries.
+type StreakResponse struct {
+	Streak int `json:"streak"`
+}
+
 type Store interface {
 	CreateHabit(ctx context.Context, name, schedule string) (Habit, error)
 	ListHabits(ctx context.Context) ([]Habit, error)

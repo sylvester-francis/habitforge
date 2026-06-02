@@ -1,0 +1,5 @@
+packages:
+  - path: "github.com/sylvester/habitforge/backend/internal/store"
+    output_path: "../frontend/src/types/api.ts"
+    type_mappings:
+      time.Time: "string"

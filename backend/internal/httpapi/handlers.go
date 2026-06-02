@@ -7,7 +7,6 @@ import (
 	"log"
 	"net/http"
 	"strconv"
-	"strings"
 	"time"
 
 	"github.com/go-chi/chi/v5"
@@ -42,16 +41,16 @@ func (a *API) createHabit(w http.ResponseWriter, r *http.Request) {
 		writeError(w, http.StatusBadRequest, "invalid JSON body")
 		return
 	}
-	req.Name = strings.TrimSpace(req.Name)
-	if req.Name == "" {
-		writeError(w, http.StatusBadRequest, "name is required")
+	name, err := validateName(req.Name)
+	if err != nil {
+		writeError(w, http.StatusBadRequest, err.Error())
 		return
 	}
 	if req.Schedule != "daily" && req.Schedule != "weekly" {
 		writeError(w, http.StatusBadRequest, `schedule must be "daily" or "weekly"`)
 		return
 	}
-	h, err := a.Store.CreateHabit(r.Context(), req.Name, req.Schedule)
+	h, err := a.Store.CreateHabit(r.Context(), name, req.Schedule)
 	if err != nil {
 		writeError(w, http.StatusInternalServerError, "could not create habit")
 		return
