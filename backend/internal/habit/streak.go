@@ -54,6 +54,9 @@ func LongestStreak(schedule Schedule, checkIns []time.Time) int {
 		for periods[p+run] {
 			run++
 		}
+		// gremlins reports the `>` -> `>=` boundary mutant here as surviving.
+		// It is equivalent: when tracking a maximum, updating on `>` versus
+		// `>=` yields the same final value, so no test can distinguish them.
 		if run > longest {
 			longest = run
 		}

@@ -1,0 +1,18 @@
+silent: false
+workers: 4
+test-cpu: 1
+unleash:
+  # This package's tests run in milliseconds, so gremlins' auto-computed timeout
+  # is too tight and healthy mutants get spuriously reported as TIMED OUT. Raise
+  # the coefficient so each mutant gets a realistic budget to actually run.
+  # (timeout-coefficient is an `unleash` subcommand flag, so it nests here.)
+  timeout-coefficient: 50
+mutants:
+  conditionals_boundary:
+    enabled: true
+  arithmetic_base:
+    enabled: true
+  increment_decrement:
+    enabled: true
+  conditional_negation:
+    enabled: true
