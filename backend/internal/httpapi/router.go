@@ -6,6 +6,7 @@ import (
 
 	"github.com/go-chi/chi/v5"
 	"github.com/go-chi/chi/v5/middleware"
+	"github.com/go-chi/cors"
 	"github.com/sylvester/habitforge/backend/internal/store"
 )
 
@@ -22,6 +23,7 @@ func appHeader() func(http.Handler) http.Handler {
 	}
 }
 func NewRouter(api *API) http.Handler {
+
 	r := chi.NewRouter()
 	r.Use(middleware.RequestID)
 	r.Use(appHeader())
@@ -29,6 +31,13 @@ func NewRouter(api *API) http.Handler {
 	r.Use(middleware.Recoverer)
 	r.Use(middleware.Timeout(15 * time.Second))
 
+	r.Use(cors.Handler(cors.Options{
+		AllowedOrigins:   []string{"http://localhost:3000"},
+		AllowedMethods:   []string{"GET", "POST", "DELETE", "OPTIONS"},
+		AllowedHeaders:   []string{"Content-Type"},
+		AllowCredentials: false,
+		MaxAge:           300,
+	}))
 	r.Get("/healthz", func(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		_, _ = w.Write([]byte("OK"))
