@@ -28,6 +28,39 @@ func CurrentStreak(schedule Schedule, today time.Time, checkIns []time.Time) int
 
 }
 
+func LongestStreak(schedule Schedule, checkIns []time.Time) int {
+	if len(checkIns) == 0 {
+		return 0
+	}
+	var ordinal func(time.Time) int
+	switch schedule {
+	case Daily:
+		ordinal = dayOrdinal
+	case Weekly:
+		ordinal = weekOrdinal
+	default:
+		return 0
+	}
+	periods := make(map[int]bool, len(checkIns))
+	for _, c := range checkIns {
+		periods[ordinal(c.UTC())] = true
+	}
+	longest := 0
+	for p := range periods {
+		if periods[p-1] {
+			continue
+		}
+		run := 1
+		for periods[p+run] {
+			run++
+		}
+		if run > longest {
+			longest = run
+		}
+	}
+	return longest
+}
+
 const dateFmt = "2006-01-02"
 
 func weeklyStreak(today time.Time, checkIns []time.Time) int {
@@ -74,4 +107,15 @@ func startOfDay(t time.Time) time.Time {
 func isoWeekKey(t time.Time) string {
 	y, w := t.ISOWeek()
 	return fmt.Sprintf("%04d-W%02d", y, w)
+}
+
+func dayOrdinal(t time.Time) int {
+	return int(startOfDay(t).Unix() / 86400)
+}
+
+func weekOrdinal(t time.Time) int {
+	d := startOfDay(t)
+	offset := (int(d.Weekday()) + 6) % 7
+	monday := d.AddDate(0, 0, -offset)
+	return int(monday.Unix() / 86400 / 7)
 }
