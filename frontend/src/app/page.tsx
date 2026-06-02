@@ -1,11 +1,16 @@
+import Link from "next/link";
+
 export default function Home() {
   return (
-    <div className="flex min-h-screen flex-col items-center justify-center
-  bg-zinc-50 font-sans dark:bg-black">
-      <main className="flex w-full max-w-3xl flex-col items-center px-16
-  py-32 bg-white dark:bg-black sm:items-start">
-        <h1 className="text-4xl font-bold">HabitForge</h1>
-      </main>
-    </div>
+    <main className="mx-auto max-w-2xl p-6">
+      <h1 className="text-3xl font-bold">HabitForge</h1>
+      <p className="mt-2 text-gray-600">Track your daily and weekly habits.</p>
+      <Link
+        href="/habits"
+        className="mt-4 inline-block rounded bg-black px-4 py-2 text-white"
+      >
+        View habits
+      </Link>
+    </main>
   );
 }
