@@ -70,8 +70,14 @@ habitforge/
 │   │   ├── store/           # Store interface + SQLite implementation
 │   │   │   └── gen/         # sqlc-generated code
 │   │   └── habit/           # domain logic (streak rules)
-│   └── migrations/          # SQL schema
+│   ├── migrations/          # SQL schema
+│   └── Dockerfile
 ├── frontend/                # Next.js app (App Router, TypeScript, Tailwind)
+│   ├── src/                 # components + lib, with *.test.ts(x) alongside
+│   ├── stryker.config.mjs   # mutation testing config
+│   ├── vitest.config.ts
+│   └── Dockerfile
+├── docker-compose.yml       # run both services together
 └── habitforge-guide.md      # the full chapter-by-chapter walkthrough
 ```
 
@@ -100,6 +106,30 @@ bun install
 bun run dev                  # http://localhost:3000
 ```
 
+The frontend reads `NEXT_PUBLIC_API_URL` (defaults to `http://localhost:8080`).
+
+### Everything at once (Docker Compose)
+
+```bash
+docker compose up --build    # backend on :8080, frontend on :3000
+```
+
+Open http://localhost:3000. Data persists in the `habitforge-db` volume; `docker compose down -v` wipes it. Because `NEXT_PUBLIC_API_URL` is inlined into the client bundle at build time, rebuild (`--build`) after changing it. Server Components reach the backend over the compose network via `INTERNAL_API_URL` (`http://backend:8080`), while the browser uses `http://localhost:8080`.
+
+## Testing
+
+```bash
+# Backend (Go)
+cd backend
+go test ./...                # unit tests (table-driven streak logic)
+gremlins unleash ./...       # mutation testing
+
+# Frontend (TypeScript)
+cd frontend
+bun run test                 # Vitest (use `bun run test`, not `bun test`)
+bun run mutate               # Stryker mutation testing → reports/mutation/mutation.html
+```
+
 ## API
 
 | Method | Path | Description |
@@ -110,10 +140,11 @@ bun run dev                  # http://localhost:3000
 | `GET`  | `/api/habits/{id}` | Get one habit (404 if missing) |
 | `DELETE` | `/api/habits/{id}` | Delete a habit (204) |
 | `POST` | `/api/habits/{id}/checkins` | Record a check-in for today (server-owned clock) |
+| `GET`  | `/api/habits/{id}/streak` | Current streak for a habit (`{"streak"}`) |
 
 ```bash
 curl -s -X POST localhost:8080/api/habits -d '{"name":"Read","schedule":"daily"}'
-# {"id":1,"name":"Read","schedule":"daily","createdAt":"2026-06-01T01:27:41Z"}
+# {"id":1,"name":"Read","schedule":"daily","createdAt":"2026-06-01T01:27:41Z","archived":false}
 ```
 
 ## License
