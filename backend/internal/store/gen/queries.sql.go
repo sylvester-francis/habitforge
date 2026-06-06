@@ -35,9 +35,16 @@ type CreateHabitParams struct {
 	CreatedAt string
 }
 
-func (q *Queries) CreateHabit(ctx context.Context, arg CreateHabitParams) (Habit, error) {
+type CreateHabitRow struct {
+	ID        int64
+	Name      string
+	Schedule  string
+	CreatedAt string
+}
+
+func (q *Queries) CreateHabit(ctx context.Context, arg CreateHabitParams) (CreateHabitRow, error) {
 	row := q.db.QueryRowContext(ctx, createHabit, arg.Name, arg.Schedule, arg.CreatedAt)
-	var i Habit
+	var i CreateHabitRow
 	err := row.Scan(
 		&i.ID,
 		&i.Name,
@@ -57,7 +64,7 @@ func (q *Queries) DeleteHabit(ctx context.Context, id int64) error {
 }
 
 const getHabit = `-- name: GetHabit :one
-SELECT id, name, schedule, created_at FROM habits WHERE id = ?
+SELECT id, name, schedule, created_at, archived FROM habits WHERE id = ?
 `
 
 func (q *Queries) GetHabit(ctx context.Context, id int64) (Habit, error) {
@@ -68,6 +75,7 @@ func (q *Queries) GetHabit(ctx context.Context, id int64) (Habit, error) {
 		&i.Name,
 		&i.Schedule,
 		&i.CreatedAt,
+		&i.Archived,
 	)
 	return i, err
 }
@@ -100,7 +108,7 @@ func (q *Queries) ListCheckIns(ctx context.Context, habitID int64) ([]string, er
 }
 
 const listHabits = `-- name: ListHabits :many
-SELECT id, name, schedule, created_at FROM habits ORDER BY id
+SELECT id, name, schedule, created_at, archived FROM habits ORDER BY id
 `
 
 func (q *Queries) ListHabits(ctx context.Context) ([]Habit, error) {
@@ -117,6 +125,7 @@ func (q *Queries) ListHabits(ctx context.Context) ([]Habit, error) {
 			&i.Name,
 			&i.Schedule,
 			&i.CreatedAt,
+			&i.Archived,
 		); err != nil {
 			return nil, err
 		}

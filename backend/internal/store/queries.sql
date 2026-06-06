@@ -4,10 +4,10 @@ VALUES (?, ?, ?)
 RETURNING id, name, schedule, created_at;
 
 -- name: ListHabits :many
-SELECT id, name, schedule, created_at FROM habits ORDER BY id;
+SELECT id, name, schedule, created_at, archived FROM habits ORDER BY id;
 
 -- name: GetHabit :one
-SELECT id, name, schedule, created_at FROM habits WHERE id = ?;
+SELECT id, name, schedule, created_at, archived FROM habits WHERE id = ?;
 
 -- name: DeleteHabit :exec
 DELETE FROM habits WHERE id = ?;

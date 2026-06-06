@@ -1,0 +1,7 @@
+# Never bake the local dev database into the image.
+*.db
+*.db-shm
+*.db-wal
+
+# Local tooling / output that the image does not need.
+.gremlins.yaml

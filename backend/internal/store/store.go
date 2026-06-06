@@ -10,6 +10,7 @@ type Habit struct {
 	Name      string    `json:"name"`
 	Schedule  string    `json:"schedule"`
 	CreatedAt time.Time `json:"createdAt"`
+	Archived  bool      `json:"archived"`
 }
 
 // CreateHabitRequest is the JSON body of POST /api/habits.

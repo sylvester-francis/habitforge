@@ -14,7 +14,11 @@ func main() {
 	if addr == "" {
 		addr = ":8080"
 	}
-	s, err := store.OpenSQLite("habitforge.db")
+	dbPath := os.Getenv("HABIT_FORGE_DB")
+	if dbPath == "" {
+		dbPath = "habitforge.db"
+	}
+	s, err := store.OpenSQLite(dbPath)
 	if err != nil {
 		log.Fatalf("open store: %v", err)
 	}

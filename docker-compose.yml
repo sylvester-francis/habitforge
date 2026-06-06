@@ -1,0 +1,32 @@
+services:
+  backend:
+    build: ./backend
+    ports:
+      - "8080:8080"
+    environment:
+      HABIT_FORGE_DB: /data/habitforge.db
+    volumes:
+      - habitforge-db:/data
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://localhost:8080/healthz"]
+      interval: 5s
+      timeout: 3s
+      retries: 5
+
+  frontend:
+    build:
+      context: ./frontend
+      args:
+        # Baked into the client bundle — this is the URL the browser calls.
+        NEXT_PUBLIC_API_URL: http://localhost:8080
+    ports:
+      - "3000:3000"
+    environment:
+      # Used by Server Components, which reach the backend over the compose network.
+      INTERNAL_API_URL: http://backend:8080
+    depends_on:
+      backend:
+        condition: service_healthy
+
+volumes:
+  habitforge-db:

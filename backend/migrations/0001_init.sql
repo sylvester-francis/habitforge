@@ -2,7 +2,8 @@ CREATE TABLE habits (
     id          INTEGER PRIMARY KEY AUTOINCREMENT,
     name        TEXT NOT NULL,
     schedule    TEXT NOT NULL CHECK (schedule IN ('daily','weekly')),
-    created_at  TEXT NOT NULL
+    created_at  TEXT NOT NULL,
+    archived    INTEGER NOT NULL DEFAULT 0
 );
 
 CREATE TABLE check_ins (

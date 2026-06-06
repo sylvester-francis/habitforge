@@ -57,7 +57,7 @@ func (s *SQLiteStore) ListHabits(ctx context.Context) ([]Habit, error) {
 	out := make([]Habit, 0, len(rows))
 	for _, r := range rows {
 		t, _ := time.Parse(time.RFC3339, r.CreatedAt)
-		out = append(out, Habit{ID: r.ID, Name: r.Name, Schedule: r.Schedule, CreatedAt: t})
+		out = append(out, Habit{ID: r.ID, Name: r.Name, Schedule: r.Schedule, CreatedAt: t, Archived: r.Archived != 0})
 	}
 	return out, nil
 }
@@ -68,7 +68,7 @@ func (s *SQLiteStore) GetHabit(ctx context.Context, id int64) (Habit, error) {
 		return Habit{}, fmt.Errorf("get habit %d: %w", id, err)
 	}
 	t, _ := time.Parse(time.RFC3339, row.CreatedAt)
-	return Habit{ID: row.ID, Name: row.Name, Schedule: row.Schedule, CreatedAt: t}, nil
+	return Habit{ID: row.ID, Name: row.Name, Schedule: row.Schedule, CreatedAt: t, Archived: row.Archived != 0}, nil
 }
 
 func (s *SQLiteStore) DeleteHabit(ctx context.Context, id int64) error {

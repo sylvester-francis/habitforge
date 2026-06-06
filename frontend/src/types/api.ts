@@ -14,6 +14,7 @@ export interface Habit {
   name: string;
   schedule: string;
   createdAt: string;
+  archived: boolean;
 }
 /**
  * CreateHabitRequest is the JSON body of POST /api/habits.

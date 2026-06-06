@@ -18,7 +18,8 @@ export function HabitList() {
     if (error) {
         return <p className="font-mono text-sm text-red-400">Failed to load.</p>;
     }
-    if (!data || data.length === 0) {
+    const active = (data ?? []).filter((h) => !h.archived);
+    if (active.length === 0) {
         return (
             <p className="rounded-xl border border-dashed border-iron-700 px-4 py-8 text-center text-cream-dim">
                 No habits yet. Forge your first one above.
@@ -28,7 +29,7 @@ export function HabitList() {
 
     return (
         <ul className="space-y-3">
-            {data.map((h) => (
+            {active.map((h) => (
                 <li key={h.id}>
                     <Link
                         href={`/habits/${h.id}`}

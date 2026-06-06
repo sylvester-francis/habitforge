@@ -15,4 +15,5 @@ type Habit struct {
 	Name      string
 	Schedule  string
 	CreatedAt string
+	Archived  int64
 }
